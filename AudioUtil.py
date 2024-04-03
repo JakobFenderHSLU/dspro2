@@ -19,7 +19,7 @@ class AudioUtil:
         :return: a tuple containing the signal and the sample rate
         """
         sig, sr = torchaudio.load(audio_file)
-        return (sig, sr)
+        return sig, sr
 
     @staticmethod
     def rechannel(aud, new_channel):
@@ -57,7 +57,7 @@ class AudioUtil:
         """
         sig, sr = aud
 
-        if (sr == newsr):
+        if sr == newsr:
             # Nothing to do
             return aud
 
@@ -132,7 +132,7 @@ class AudioUtil:
 
         # Convert to decibels
         spec = transforms.AmplitudeToDB(top_db=top_db)(spec)
-        return (spec)
+        return spec
 
     @staticmethod
     def spectro_augment(spec, max_mask_pct=0.1, n_freq_masks=1, n_time_masks=1):
