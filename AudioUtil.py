@@ -1,4 +1,8 @@
-import math, random
+# This file was created with the help of the following tutorial:
+# https://towardsdatascience.com/audio-deep-learning-made-simple-sound-classification-step-by-step-cebc936bbe5
+
+import math
+import random
 import torch
 import torchaudio
 from matplotlib import pyplot as plt
