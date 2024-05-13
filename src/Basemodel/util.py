@@ -5,7 +5,6 @@ from torch.utils.data import DataLoader, Dataset, random_split
 from torch.nn import init
 from torch import nn
 
-class_ids_dict = {'aldfly': 0, 'bkcchi': 1}
 
 
 # ----------------------------
@@ -15,7 +14,7 @@ class SoundDS(Dataset):
     def __init__(self, df, data_path):
         self.df = df
         self.data_path = str(data_path)
-        self.duration = 4000
+        self.duration = 30000
         self.sr = 44100
         self.channel = 2
         self.shift_pct = 0.4
@@ -33,10 +32,11 @@ class SoundDS(Dataset):
     def __getitem__(self, idx):
         # Absolute file path of the audio file - concatenate the audio directory with
         # the relative path
-        audio_file = self.data_path + self.df.loc[idx, 'ebird_code'] + '/' + self.df.loc[idx, 'filename']
+        # df_dict = {"species_id": [], "name": [], "path": []}
+
+        audio_file = self.df.loc[idx, 'path']
         # Get the Class ID
-        ebird_code = self.df.loc[idx, 'ebird_code']
-        class_id = class_ids_dict[ebird_code]
+        class_id = self.df.loc[idx, 'species_id']
 
         aud = AudioUtil.open(audio_file)
         # Some sounds have a higher sample rate, or fewer channels compared to the
@@ -100,7 +100,7 @@ class AudioClassifier(nn.Module):
 
         # Linear Classifier
         self.ap = nn.AdaptiveAvgPool2d(output_size=1)
-        self.lin = nn.Linear(in_features=64, out_features=10)
+        self.lin = nn.Linear(in_features=64, out_features=438)
 
         # Wrap the Convolutional Blocks
         self.conv = nn.Sequential(*conv_layers)
@@ -124,6 +124,8 @@ class AudioClassifier(nn.Module):
 
 
 def training(model, train_dl, num_epochs, device):
+    model = model.to(device)
+
     # Loss Function, Optimizer and Scheduler
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=wandb.config.learning_rate)
@@ -134,6 +136,7 @@ def training(model, train_dl, num_epochs, device):
 
     # Repeat for each epoch
     for epoch in range(num_epochs):
+        print(f'Epoch: {epoch}')
         running_loss = 0.0
         correct_prediction = 0
         total_prediction = 0
@@ -183,6 +186,7 @@ def training(model, train_dl, num_epochs, device):
 # Inference
 # ----------------------------
 def inference(model, val_dl, device):
+    model = model.to(device)
     correct_prediction = 0
     total_prediction = 0
 
