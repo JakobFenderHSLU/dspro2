@@ -1,17 +1,12 @@
-import torch
-import wandb
-from AudioUtil import AudioUtil
-from torch.utils.data import DataLoader, Dataset, random_split
-from torch.nn import init
 from torch import nn
+from torch.nn import init
 
 
 class AudioClassifier(nn.Module):
     # ----------------------------
     # Build the model architecture
     # ----------------------------
-    def __init__(self, num_classes=438):
-
+    def __init__(self, num_classes: int = 438):
         if num_classes <= 0:
             raise ValueError("Number of classes should be a positive integer")
 
@@ -70,6 +65,9 @@ class AudioClassifier(nn.Module):
 
         # Linear layer
         x = self.lin(x)
+
+        # softmax
+        x = nn.functional.softmax(x, dim=1)
 
         # Final output
         return x

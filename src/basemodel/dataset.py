@@ -27,7 +27,7 @@ class SoundDS(Dataset):
     def __getitem__(self, idx):
         # Do all the audio augmentation here
         timestamp = time.time()
-        audio_file = self.df.loc[idx, 'path']
+        audio_file = self.df.loc[idx, 'file_path']
         class_id = self.df.loc[idx, 'species_id']
 
         aud = AudioUtil.open(audio_file)

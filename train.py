@@ -1,9 +1,11 @@
 import argparse
+import os
 import pathlib
 
 import pandas as pd
 import torch
 
+from src.basemodel.runner import BasemodelRunner
 from src.util.FileUtils import validate
 
 POSSIBLE_MODELS = ["cnn", "cnn-transfer"]
@@ -38,5 +40,15 @@ if __name__ == "__main__":
 
         if args.model == "cnn":
             print("Training base cnn model...")
+
+            os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+            os.environ['TORCH_USE_CUDA_DSA'] = '1'
+            train_df = train_df[train_df['species_id'] < 3]
+            test_df = test_df[test_df['species_id'] < 3]
+
+            runner = BasemodelRunner(train_df, test_df)
+            runner.run()
+            print("Training complete!")
+
         elif args.model == "cnn-transfer":
             print("Training transfer learning model...")

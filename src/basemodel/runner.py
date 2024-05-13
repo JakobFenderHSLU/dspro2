@@ -1,15 +1,13 @@
 import time
 
-import pandas as pd
 import torch
 import wandb
 from sklearn.metrics import f1_score, roc_auc_score, accuracy_score, matthews_corrcoef, cohen_kappa_score, log_loss
 from torch import nn
-
 from torch.utils.data import DataLoader
-from torch.utils.data import random_split
-from classifier import AudioClassifier
-from dataset import SoundDS
+
+from src.basemodel.dataset import SoundDS
+from src.basemodel.classifier import AudioClassifier
 
 torch.cuda.is_available()
 if not torch.cuda.is_available():
@@ -29,13 +27,14 @@ class BasemodelRunner:
 
         self.model = None
 
-    def setup(self):
+    def run(self):
         sweep_config = {
             "name": "Baseline Sweep",
             "method": "bayes",
             "metric": {"goal": "maximize", "name": "val_acc"},
             "parameters": {
-                "epochs": {"min": 7, "max": 20},
+                # "epochs": {"min": 1, "max": 1},
+                "epochs": {"values": [1]},
                 "learning_rate": {"min": 0, "max": 0.1, "distribution": "log_uniform"},
 
                 "batch_size_train": {"values": [32]},
@@ -44,9 +43,9 @@ class BasemodelRunner:
             }
         }
         sweep_id = wandb.sweep(sweep=sweep_config, project="Baseline-Full", entity="swiss-birder")
-        wandb.agent(sweep_id, function=self.run)
+        wandb.agent(sweep_id, function=self._run, count=1) # TODO: Change count to 10
 
-    def run(self):
+    def _run(self):
         run = wandb.init()
 
         train_ds = SoundDS(self.train_df)
@@ -56,22 +55,23 @@ class BasemodelRunner:
         self.train_dl = torch.utils.data.DataLoader(train_ds, batch_size=wandb.config.batch_size_train, shuffle=True)
         self.val_dl = torch.utils.data.DataLoader(val_ds, batch_size=wandb.config.batch_size_val, shuffle=False)
 
-        model = AudioClassifier(self.class_counts)
+        model = AudioClassifier(self.class_counts + 1)
         self.model = model.to(self.device)
 
         self._training()
 
         self._inference()
 
-        model_name = f"{run.id}_{run.name}_model.onnx"
-        torch.onnx.export(self.model, torch.randn(1, 1, 128, 201), model_name)
+        model_name = f"./output/{run.id}_{run.name}_model.onnx"
+        torch.onnx.export(self.model, torch.randn(1, 2, 64, 64).to(self.device), model_name)
 
         wandb.save(model_name)
+        wandb.finish()
 
     def _training(self):
 
         # Loss Function, Optimizer and Scheduler
-        criterion = nn.CrossEntropyLoss()
+        loss_function = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=wandb.config.learning_rate)
         scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=wandb.config.learning_rate,
                                                         steps_per_epoch=int(len(self.train_dl)),
@@ -84,7 +84,7 @@ class BasemodelRunner:
             epoch_time = time.time()
 
             # Repeat for each batch in the training set
-            for i, data in enumerate(self.train_dl):
+            for data in self.train_dl:
                 timestamp = time.time()
                 # Get the input features and target labels, and put them on the GPU
                 inputs, labels = data[0].to(self.device), data[1].to(self.device)
@@ -98,7 +98,7 @@ class BasemodelRunner:
 
                 # forward + backward + optimize
                 outputs = self.model(inputs)
-                loss = criterion(outputs, labels)
+                loss = loss_function(outputs, labels)
                 loss.backward()
                 optimizer.step()
                 scheduler.step()
@@ -116,7 +116,7 @@ class BasemodelRunner:
             y_pred = []
             y_true = []
             for data in self.val_dl:
-                criterion = nn.CrossEntropyLoss()
+                loss_function = nn.CrossEntropyLoss()
 
                 # Get the input features and target labels, and put them on the GPU
                 inputs, labels = data[0].to(self.device), data[1].to(self.device)
@@ -128,7 +128,7 @@ class BasemodelRunner:
 
                 # Get predictions
                 outputs = self.model(inputs)
-                loss = criterion(outputs, labels)
+                loss = loss_function(outputs, labels)
                 wandb.log({"val_loss": loss.item()})
 
                 # Get the predicted class with the highest score
@@ -139,9 +139,5 @@ class BasemodelRunner:
         wandb.log({"val_acc": accuracy_score(y_true, y_pred)})
         wandb.log({"conf_mat": wandb.plot.confusion_matrix(probs=None, y_true=y_true, preds=y_pred, class_names=None)})
         wandb.log({"val_f1": f1_score(y_true, y_pred, average='weighted')})
-        wandb.log({"val_roc_auc": roc_auc_score(y_true, y_pred)})
         wandb.log({"val_mcc": matthews_corrcoef(y_true, y_pred)})
         wandb.log({"val_kappa": cohen_kappa_score(y_true, y_pred)})
-        wandb.log({"val_log_loss": log_loss(y_true, y_pred)})
-
-        wandb.finish()
