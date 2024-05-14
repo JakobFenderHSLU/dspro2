@@ -2,12 +2,12 @@ import time
 
 import torch
 import wandb
-from sklearn.metrics import f1_score, roc_auc_score, accuracy_score, matthews_corrcoef, cohen_kappa_score, log_loss
+from sklearn.metrics import f1_score, accuracy_score
 from torch import nn
 from torch.utils.data import DataLoader
 
-from src.basemodel.dataset import SoundDS
 from src.basemodel.classifier import AudioClassifier
+from src.basemodel.dataset import SoundDS
 
 torch.cuda.is_available()
 if not torch.cuda.is_available():
@@ -20,9 +20,10 @@ class BasemodelRunner:
         self.val_df = val_df
         self.train_dl = None
         self.val_dl = None
-        self.class_counts: int = self.train_df['species_id'].nunique()
+        self.class_counts: int = max(self.train_df['species_id'].max(), self.val_df['species_id'].max()) + 1
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
         print(f"Using device {self.device}")
 
         self.model = None
@@ -31,31 +32,31 @@ class BasemodelRunner:
         sweep_config = {
             "name": "Baseline Sweep",
             "method": "bayes",
-            "metric": {"goal": "maximize", "name": "val_acc"},
+            "metric": {"goal": "maximize", "name": "val_f1"},
             "parameters": {
-                # "epochs": {"min": 1, "max": 1},
-                "epochs": {"values": [1]},
-                "learning_rate": {"min": 0, "max": 0.1, "distribution": "log_uniform"},
-
-                "batch_size_train": {"values": [32]},
-                "batch_size_val": {"values": [32]},
+                "epochs": {"min": 7, "max": 20},
+                "learning_rate": {"min": 0.0001, "max": 0.1},
+                "batch_size_train": {"values": [64]},
+                "batch_size_val": {"values": [64]},
                 "anneal_strategy": {"values": ["linear"]},
             }
         }
         sweep_id = wandb.sweep(sweep=sweep_config, project="Baseline-Full", entity="swiss-birder")
-        wandb.agent(sweep_id, function=self._run, count=1) # TODO: Change count to 10
+        wandb.agent(sweep_id, function=self._run, count=10)
 
     def _run(self):
         run = wandb.init()
+        print(f"Using device {self.device}")
 
-        train_ds = SoundDS(self.train_df)
-        val_ds = SoundDS(self.val_df)
+        train_ds = SoundDS(self.train_df, self.device)
+        val_ds = SoundDS(self.val_df, self.device)
 
         # Create training and validation data loaders
         self.train_dl = torch.utils.data.DataLoader(train_ds, batch_size=wandb.config.batch_size_train, shuffle=True)
         self.val_dl = torch.utils.data.DataLoader(val_ds, batch_size=wandb.config.batch_size_val, shuffle=False)
 
-        model = AudioClassifier(self.class_counts + 1)
+        print(self.class_counts)
+        model = AudioClassifier(self.class_counts)
         self.model = model.to(self.device)
 
         self._training()
@@ -65,6 +66,7 @@ class BasemodelRunner:
         model_name = f"./output/{run.id}_{run.name}_model.onnx"
         torch.onnx.export(self.model, torch.randn(1, 2, 64, 64).to(self.device), model_name)
 
+        print(f"Model saved to {model_name}")
         wandb.save(model_name)
         wandb.finish()
 
@@ -108,7 +110,9 @@ class BasemodelRunner:
 
                 wandb.log({"batch_time": time.time() - timestamp})
 
-            wandb.log({"epoch_time": time.time() - epoch_time})
+            epoch_duration = time.time() - epoch_time
+            wandb.log({"epoch_duration": epoch_duration})
+            print(f"Epoch time: {int(epoch_duration // 60)} min {int(epoch_duration % 60)} sec")
 
     def _inference(self):
         # Disable gradient updates
@@ -120,6 +124,7 @@ class BasemodelRunner:
 
                 # Get the input features and target labels, and put them on the GPU
                 inputs, labels = data[0].to(self.device), data[1].to(self.device)
+
                 y_true.extend(labels.cpu().numpy())
 
                 # Normalize the inputs
@@ -136,8 +141,6 @@ class BasemodelRunner:
                 # Count of predictions that matched the target label
                 y_pred.extend(prediction.cpu().numpy())
 
-        wandb.log({"val_acc": accuracy_score(y_true, y_pred)})
-        wandb.log({"conf_mat": wandb.plot.confusion_matrix(probs=None, y_true=y_true, preds=y_pred, class_names=None)})
-        wandb.log({"val_f1": f1_score(y_true, y_pred, average='weighted')})
-        wandb.log({"val_mcc": matthews_corrcoef(y_true, y_pred)})
-        wandb.log({"val_kappa": cohen_kappa_score(y_true, y_pred)})
+            wandb.log({"val_confusion": wandb.sklearn.plot_confusion_matrix(y_true, y_pred)})
+            wandb.log({"val_acc": accuracy_score(y_true, y_pred)})
+            wandb.log({"val_f1": f1_score(y_true, y_pred, average='weighted')})

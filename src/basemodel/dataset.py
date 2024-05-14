@@ -7,8 +7,9 @@ from src.util.AudioUtil import AudioUtil
 
 
 class SoundDS(Dataset):
-    def __init__(self, df):
+    def __init__(self, df, device):
         self.df = df
+        self.device = device
         self.duration = 30000
         self.sr = 44100
         self.channel = 2
@@ -30,10 +31,10 @@ class SoundDS(Dataset):
         audio_file = self.df.loc[idx, 'file_path']
         class_id = self.df.loc[idx, 'species_id']
 
-        aud = AudioUtil.open(audio_file)
-        reaud = AudioUtil.resample(aud, self.sr)
+        sig, sr = AudioUtil.open(audio_file)
+        sig = sig.to(self.device)
+        reaud = AudioUtil.resample((sig, sr), self.sr)
         rechan = AudioUtil.rechannel(reaud, self.channel)
-
         dur_aud = AudioUtil.pad_trunc(rechan, self.duration)
         shift_aud = AudioUtil.time_shift(dur_aud, self.shift_pct)
         sgram = AudioUtil.spectro_gram(shift_aud, n_mels=64, n_fft=1024, hop_len=None)
