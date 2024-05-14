@@ -19,7 +19,7 @@ def split_data(path: str = "./../../input/scrape/", split_ratio: [] = None, seed
     folders = os.listdir(path)
     folders = [f for f in folders if os.path.isdir(os.path.join(path, f))]
 
-    current_species_id = 1
+    current_species_id = 0
     df_dict = {"species_id": [], "species_name": [], "file_path": []}
 
     for folder in folders:

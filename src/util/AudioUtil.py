@@ -1,13 +1,12 @@
 # This file was created with the help of the following tutorial:
 # https://towardsdatascience.com/audio-deep-learning-made-simple-sound-classification-step-by-step-cebc936bbe5
 
-import math
 import random
+
 import torch
 import torchaudio
-from matplotlib import pyplot as plt
+from torch import Tensor
 from torchaudio import transforms
-from IPython.display import Audio
 
 
 class AudioUtil:
@@ -22,27 +21,27 @@ class AudioUtil:
         return sig, sr
 
     @staticmethod
-    def rechannel(aud, new_channel) -> (torch.Tensor, int):
+    def rechannel(audio, new_channel) -> (torch.Tensor, int):
         """
         Convert the given audio to the desired number of channels
-        :param aud: the audio
+        :param audio: the audio
         :param new_channel: the desired number of channels
         :return: the audio with the desired number of channels
         """
-        sig, sr = aud
+        signal, sample_rate = audio
 
-        if sig.shape[0] == new_channel:
+        if signal.shape[0] == new_channel:
             # Nothing to do
-            return aud
+            return audio
 
         if new_channel == 1:
             # Convert from stereo to mono by selecting only the first channel
-            resig = sig[:1, :]
+            mono_signal = signal[:1, :]
         else:
             # Convert from mono to stereo by duplicating the first channel
-            resig = torch.cat([sig, sig])
+            mono_signal = torch.cat([signal, signal])
 
-        return resig, sr
+        return mono_signal, sample_rate
 
     # ----------------------------
     # Since Resample applies to a single channel, we resample one channel at a time
@@ -101,18 +100,18 @@ class AudioUtil:
         return sig, sr
 
     @staticmethod
-    def time_shift(aud, shift_limit) -> (torch.Tensor, int):
+    def time_shift(audio, shift_limit) -> (torch.Tensor, int):
         """
         Shift the signal to the left or right by some percent. Values at the end are 'wrapped around' to the start of
         the transformed signal.
-        :param aud: the audio
+        :param audio: the audio
         :param shift_limit: the limit of the shift
         :return: the audio with the shifted signal
         """
-        sig, sr = aud
-        _, sig_len = sig.shape
-        shift_amt = int(random.random() * shift_limit * sig_len)
-        return sig.roll(shift_amt), sr
+        signal, sampling_rate = audio
+        _, signal_length = signal.shape
+        shift_amt = int(random.random() * shift_limit * signal_length)
+        return signal.roll(shift_amt), sampling_rate
 
     @staticmethod
     def spectro_gram(aud, n_mels=64, n_fft=1024, hop_len=None) -> torch.Tensor:
@@ -124,30 +123,32 @@ class AudioUtil:
         :param hop_len: the number of samples between successive frames
         :return: the spectrogram
         """
-        sig, sr = aud
+        signal, sampling_rate = aud
         top_db = 80
 
         # spec has shape [channel, n_mels, time], where channel is mono, stereo etc
-        spec_transform = transforms.MelSpectrogram(sr, n_fft=n_fft, hop_length=hop_len, n_mels=n_mels).to(sig.device)
-        spec = spec_transform(sig)
+        spec_transform = transforms.MelSpectrogram(sampling_rate, n_fft=n_fft, hop_length=hop_len, n_mels=n_mels).to(
+            signal.device)
+        spectrogram = spec_transform(signal)
 
         # Convert to decibels
-        spec = transforms.AmplitudeToDB(top_db=top_db)(spec)
-        return spec
+        spectrogram = transforms.AmplitudeToDB(top_db=top_db)(spectrogram)
+        return spectrogram
 
     @staticmethod
-    def spectro_augment(spec, max_mask_pct=0.1, n_freq_masks=1, n_time_masks=1) -> torch.Tensor:
+    def spectro_augment(spectrogram: Tensor, max_mask_pct: float = 0.1, n_freq_masks: int = 1,
+                        n_time_masks: int = 1) -> torch.Tensor:
         """
         Augment a spectrogram by masking out some sections of it in both the frequency and time dimension
-        :param spec: the spectrogram
+        :param spectrogram: the spectrogram
         :param max_mask_pct: the maximum percentage of the spectrogram to mask out
         :param n_freq_masks: the number of frequency masks to apply
         :param n_time_masks: the number of time masks to apply
         :return: the augmented spectrogram
         """
-        _, n_mels, n_steps = spec.shape
-        mask_value = spec.mean()
-        aug_spec = spec
+        _, n_mels, n_steps = spectrogram.shape
+        mask_value = spectrogram.mean()
+        aug_spec = spectrogram
 
         freq_mask_param = max_mask_pct * n_mels
         for _ in range(n_freq_masks):

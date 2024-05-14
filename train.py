@@ -24,7 +24,7 @@ if __name__ == "__main__":
 
     if not torch.cuda.is_available() and not args.cpu:
         print("CUDA not available. Please make sure you have a CUDA-enabled GPU. "
-              "If you want to train on CPU, use the -c flag.")
+              "If you want to train on CPU, use the --cpu flag.")
         exit()
 
     if args.path is None:
@@ -47,22 +47,22 @@ if __name__ == "__main__":
             # most samples per species in the first 10 species
 
             # get id of top 3 species with most samples
-            most_samples_train = train_df[train_df['species_id'] < 50]['species_id'].value_counts().head(3)
-            most_samples_test = test_df[test_df['species_id'] < 50]['species_id'].value_counts().head(3)
+            most_samples_train = train_df[train_df['species_id'] < 10]['species_id'].value_counts().head(2)
+            most_samples_test = test_df[test_df['species_id'] < 10]['species_id'].value_counts().head(2)
 
             train_df = train_df[train_df['species_id'].isin(most_samples_train.index)]
             test_df = test_df[test_df['species_id'].isin(most_samples_test.index)]
 
             # replace old index with new
-            train_df['species_id'] = train_df['species_id'].replace(most_samples_train.index, [1, 2, 3])
-            test_df['species_id'] = test_df['species_id'].replace(most_samples_test.index, [1, 2, 3])
+            train_df['species_id'] = train_df['species_id'].replace(most_samples_train.index, [0, 1])
+            test_df['species_id'] = test_df['species_id'].replace(most_samples_test.index, [0, 1])
 
             # reset index
             train_df = train_df.reset_index(drop=True)
             test_df = test_df.reset_index(drop=True)
 
             # Set environment variables for debugging
-            os.environ['CUDA_LAUNCH_BLOCKING'] = '1'  # Synchronizes CPU and GPU
+            os.environ['CUDA_LAUNCH_BLOCKING'] = '0'  # Synchronizes CPU and GPU
             os.environ['TORCH_USE_CUDA_DSA'] = '1'  # Use CUDA Device-Side Assertions
         else:
             os.environ['CUDA_LAUNCH_BLOCKING'] = '0'
@@ -70,7 +70,6 @@ if __name__ == "__main__":
 
         if args.model == "cnn":
             print("Training base cnn model...")
-
             runner = BasemodelRunner(train_df, test_df)
             runner.run()
             print("Training complete!")
