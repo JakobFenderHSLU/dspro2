@@ -18,6 +18,7 @@ if __name__ == "__main__":
     parser.add_argument('-m', '--model', default=POSSIBLE_MODELS[0], const=POSSIBLE_MODELS[0],
                         choices=POSSIBLE_MODELS, help="model to use for training", nargs='?')
     parser.add_argument("-c", "--cpu", action="store_true", help="use CPU instead of GPU")
+    parser.add_argument("-d", "--debug", action="store_true", help="debug mode")
 
     args = parser.parse_args()
 
@@ -38,13 +39,37 @@ if __name__ == "__main__":
         train_df = pd.read_csv(path / "train.csv")
         test_df = pd.read_csv(path / "val.csv")
 
+        # shuffle
+        train_df = train_df.sample(frac=1).reset_index(drop=True)
+        test_df = test_df.sample(frac=1).reset_index(drop=True)
+
+        if args.debug:
+            # most samples per species in the first 10 species
+
+            # get id of top 3 species with most samples
+            most_samples_train = train_df[train_df['species_id'] < 50]['species_id'].value_counts().head(3)
+            most_samples_test = test_df[test_df['species_id'] < 50]['species_id'].value_counts().head(3)
+
+            train_df = train_df[train_df['species_id'].isin(most_samples_train.index)]
+            test_df = test_df[test_df['species_id'].isin(most_samples_test.index)]
+
+            # replace old index with new
+            train_df['species_id'] = train_df['species_id'].replace(most_samples_train.index, [1, 2, 3])
+            test_df['species_id'] = test_df['species_id'].replace(most_samples_test.index, [1, 2, 3])
+
+            # reset index
+            train_df = train_df.reset_index(drop=True)
+            test_df = test_df.reset_index(drop=True)
+
+            # Set environment variables for debugging
+            os.environ['CUDA_LAUNCH_BLOCKING'] = '1'  # Synchronizes CPU and GPU
+            os.environ['TORCH_USE_CUDA_DSA'] = '1'  # Use CUDA Device-Side Assertions
+        else:
+            os.environ['CUDA_LAUNCH_BLOCKING'] = '0'
+            os.environ['TORCH_USE_CUDA_DSA'] = '0'
+
         if args.model == "cnn":
             print("Training base cnn model...")
-
-            os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-            os.environ['TORCH_USE_CUDA_DSA'] = '1'
-            train_df = train_df[train_df['species_id'] < 3]
-            test_df = test_df[test_df['species_id'] < 3]
 
             runner = BasemodelRunner(train_df, test_df)
             runner.run()
