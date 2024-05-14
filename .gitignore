@@ -3,3 +3,5 @@
 /wandb/
 .idea/
 output/
+
+tmp/
