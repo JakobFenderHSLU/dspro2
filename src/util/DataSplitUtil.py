@@ -22,7 +22,6 @@ def split_data(path: str = "./../../input/scrape/", split_ratio: List[float] = [
     folders = os.listdir(path)
     folders = [f for f in folders if os.path.isdir(os.path.join(path, f))]
 
-    current_species_id = 0
     df_dict = {"species_name": [], "file_path": []}
 
     for folder in folders:
@@ -36,8 +35,6 @@ def split_data(path: str = "./../../input/scrape/", split_ratio: List[float] = [
             file_path = str(os.path.join(path, folder, file))
             df_dict["species_name"].append(folder)
             df_dict["file_path"].append(file_path)
-
-        current_species_id += 1
 
     df = pd.DataFrame(df_dict)
     print("")
