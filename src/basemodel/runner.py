@@ -52,14 +52,13 @@ class BasemodelRunner:
         print(f"Using device {self.device}")
 
         train_ds = SoundDS(self.train_df, self.device)
+        val_ds = SoundDS(self.val_df, self.device)
 
         self.train_dl = DataLoader(train_ds, batch_size=wandb.config.batch_size_train,
-                                   shuffle=True)  # num_workers=4 prefetch_factor=2
-        self.model = AudioClassifier(self.class_counts).to(self.device)
-
-        val_ds = SoundDS(self.val_df, self.device)
+                                   shuffle=True, num_workers=4, prefetch_factor=2)  # num_workers=4 prefetch_factor=2
         self.val_dl = DataLoader(val_ds, batch_size=wandb.config.batch_size_val,
                                  shuffle=False)  # num_workers=16 prefetch_factor=2
+        self.model = AudioClassifier(self.class_counts).to(self.device)
 
         img = wandb.Image(self.val_dl.dataset[0][0][0].cpu().numpy())
         wandb.log({"val/img": img})
@@ -104,9 +103,10 @@ class BasemodelRunner:
 
                 # Normalize the inputs
                 # todo: check how to normalize spectrograms
-                # inputs_m: Tensor = inputs.mean()
-                # inputs_s: Tensor = inputs.std()
-                # inputs: Tensor = (inputs - inputs_m) / inputs_s
+                # log(1 + spectrogram)
+                # inputs = log(1 + inputs)
+                # inputs_log: Tensor = torch.log1p(inputs)
+                # print(inputs.max())
 
                 # Zero the parameter gradients
                 optimizer.zero_grad()
@@ -123,6 +123,8 @@ class BasemodelRunner:
                 wandb.log({"train/loss": loss.item()})
 
                 wandb.log({"debug/time_per_batch": time.time() - timestamp})
+
+            torch.cuda.synchronize()
 
             epoch_duration = time.time() - epoch_time
             wandb.log({"epoch_duration": epoch_duration})
