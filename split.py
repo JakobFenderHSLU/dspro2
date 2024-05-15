@@ -8,6 +8,7 @@ if __name__ == "__main__":
     parser.add_argument("-r", "--ratios", type=str, nargs="+", help="ratios for train, val, test")
     parser.add_argument("-s", "--seed", type=int, help="seed value for random number generator")
     parser.add_argument("-y", "--yes", action="store_true", help="yes to skip confirmation prompt")
+    parser.add_argument("-m", "--min", type=int, help="minimum number of samples per class")
 
     args = parser.parse_args()
 
@@ -20,10 +21,14 @@ if __name__ == "__main__":
     if args.seed is None:
         args.seed = 42
 
+    if args.min is None:
+        args.min = 0
+
     print("Arguments:")
     print(f"Path: {args.path}")
     print(f"Ratios: {args.ratios}")
     print(f"Seed: {args.seed}")
+    print(f"Minimum samples per class: {args.min}")
 
     # confirm before proceeding
     if args.yes is None:
@@ -32,4 +37,4 @@ if __name__ == "__main__":
             print("Exiting...")
             exit()
 
-    split_data(args.path, args.ratios, args.seed)
+    split_data(args.path, args.ratios, args.seed, args.min)

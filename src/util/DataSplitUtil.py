@@ -1,16 +1,19 @@
 import os
-import argparse
+from typing import List
 
 import pandas as pd
+from sklearn.model_selection import train_test_split
 
 
-def split_data(path: str = "./../../input/scrape/", split_ratio: [] = None, seed: int = 42):
+def split_data(path: str = "./../../input/scrape/", split_ratio: List[float] = [0.6, 0.2, 0.2], seed: int = 42,
+               min_samples: int = 0):
     """
     Split the data into training, validation, and test sets based on the provided split ratio. Save the resulting
     DataFrames as CSV files in the specified directory.
     :param path: The path to the directory containing the data files.
     :param split_ratio: The ratio in which to split the data. Default is [0.6, 0.2, 0.2].
     :param seed: The seed value for the random number generator. Default is 42.
+    :param min_samples: The minimum number of samples per class. Default is 0.
     :return: A DataFrame containing the split data.
     """
     if not os.path.exists(path):
@@ -20,7 +23,7 @@ def split_data(path: str = "./../../input/scrape/", split_ratio: [] = None, seed
     folders = [f for f in folders if os.path.isdir(os.path.join(path, f))]
 
     current_species_id = 0
-    df_dict = {"species_id": [], "species_name": [], "file_path": []}
+    df_dict = {"species_name": [], "file_path": []}
 
     for folder in folders:
         files = os.listdir(os.path.join(path, folder))
@@ -31,13 +34,27 @@ def split_data(path: str = "./../../input/scrape/", split_ratio: [] = None, seed
 
         for file in files:
             file_path = str(os.path.join(path, folder, file))
-            df_dict["species_id"].append(current_species_id)
             df_dict["species_name"].append(folder)
             df_dict["file_path"].append(file_path)
 
         current_species_id += 1
 
     df = pd.DataFrame(df_dict)
+    print("")
+
+    # remove species with less than 3 samples
+    species_counts = df["species_name"].value_counts()
+    species_ids = species_counts[species_counts >= min_samples].index
+    df = df[df["species_name"].isin(species_ids)]
+
+    # filtered species
+    filtered_out_species = species_counts[species_counts < min_samples].index
+    for species in filtered_out_species:
+        print(f"Filtered out species {species} with {species_counts[species]} samples")
+
+    # one hot encode species_id as 1, 0
+    species_dummies = pd.get_dummies(df["species_name"], prefix="species_name")
+    df = pd.concat([df, species_dummies], axis=1)
 
     if split_ratio is None:
         raise ValueError("Split ratio must be provided")
@@ -47,30 +64,34 @@ def split_data(path: str = "./../../input/scrape/", split_ratio: [] = None, seed
     if sum(split_ratio) != 1:
         raise ValueError("Split ratio values must sum to 1")
 
-    # ensure equal split for every species
-    species_ids = df["species_id"].unique()
-    train_ids = []
-    val_ids = []
-    test_ids = []
-    for species_id in species_ids:
-        species_df = df[df["species_id"] == species_id]
-        species_df.sample(frac=1, random_state=seed).reset_index(drop=True)
-        species_df_index = species_df.index.to_list()
-        n = len(species_df_index)
-        train_size = int(split_ratio[0] * n)
-        val_size = int(split_ratio[1] * n)
-        test_size = n - train_size - val_size
-        train_ids.extend(species_df_index[:train_size])
-        val_ids.extend(species_df_index[train_size:train_size + val_size])
-        test_ids.extend(species_df_index[train_size + val_size:])
+    X = df["file_path"]
+    y = df[[col for col in df.columns if "species_name_" in col]]
 
-    train_df = df.loc[train_ids]
-    val_df = df.loc[val_ids]
-    test_df = df.loc[test_ids]
+    # make bool to int
+    y = y.astype(int)
 
-    print(f"Training set: {len(train_df)} samples")
-    print(f"Validation set: {len(val_df)} samples")
-    print(f"Test set: {len(test_df)} samples")
+    # train val test split
+    train_x, test_x, train_y, test_y = train_test_split(X, y,
+                                                        test_size=sum(split_ratio[1:]),
+                                                        random_state=seed,
+                                                        stratify=y)
+    val_x, test_x, val_y, test_y = train_test_split(test_x, test_y,
+                                                    test_size=split_ratio[1] / (split_ratio[1] + split_ratio[2]),
+                                                    random_state=seed, stratify=test_y)
+
+    train_y = train_y.astype(int)
+
+    val_y = val_y.astype(int)
+    test_y = test_y.astype(int)
+
+    # concatenate the X and y for train, val, test
+    train_df = pd.concat([train_x, train_y], axis=1)
+    val_df = pd.concat([val_x, val_y], axis=1)
+    test_df = pd.concat([test_x, test_y], axis=1)
+
+    print(f"Training set: {train_df.shape} samples")
+    print(f"Validation set: {val_df.shape} samples")
+    print(f"Test set: {test_df.shape} samples")
 
     train_df.to_csv(path + "train.csv", index=False)
     val_df.to_csv(path + "val.csv", index=False)
