@@ -37,29 +37,24 @@ if __name__ == "__main__":
 
     if path.is_dir():
         train_df = pd.read_csv(path / "train.csv")
-        test_df = pd.read_csv(path / "val.csv")
-
-        # shuffle
-        train_df = train_df.sample(frac=1).reset_index(drop=True)
-        test_df = test_df.sample(frac=1).reset_index(drop=True)
+        val_df = pd.read_csv(path / "val.csv")
 
         if args.debug:
             # most samples per species in the first 10 species
+            cols = train_df.columns[:7]
+            train_df = train_df[cols]
+            val_df = val_df[cols]
 
-            # get id of top 3 species with most samples
-            most_samples_train = train_df[train_df['species_id'] < 10]['species_id'].value_counts().head(2)
-            most_samples_test = test_df[test_df['species_id'] < 10]['species_id'].value_counts().head(2)
+            # removed all columns where species_name is everywhere 0
+            condition_exists_train = train_df.iloc[:, 1:].sum(axis=1) > 0
+            train_df = train_df[condition_exists_train]
 
-            train_df = train_df[train_df['species_id'].isin(most_samples_train.index)]
-            test_df = test_df[test_df['species_id'].isin(most_samples_test.index)]
+            condition_exists_val = val_df.iloc[:, 1:].sum(axis=1) > 0
+            val_df = val_df[condition_exists_val]
 
-            # replace old index with new
-            train_df['species_id'] = train_df['species_id'].replace(most_samples_train.index, [0, 1])
-            test_df['species_id'] = test_df['species_id'].replace(most_samples_test.index, [0, 1])
-
-            # reset index
-            train_df = train_df.reset_index(drop=True)
-            test_df = test_df.reset_index(drop=True)
+            # reset indexes
+            train_df.reset_index(drop=True, inplace=True)
+            val_df.reset_index(drop=True, inplace=True)
 
             # Set environment variables for debugging
             os.environ['CUDA_LAUNCH_BLOCKING'] = '0'  # Synchronizes CPU and GPU
@@ -70,7 +65,7 @@ if __name__ == "__main__":
 
         if args.model == "cnn":
             print("Training base cnn model...")
-            runner = BasemodelRunner(train_df, test_df)
+            runner = BasemodelRunner(train_df, val_df)
             runner.run()
             print("Training complete!")
 
