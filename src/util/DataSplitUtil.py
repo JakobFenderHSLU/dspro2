@@ -4,6 +4,10 @@ from typing import List
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
+from src.util.LoggerUtils import init_logging
+
+log = init_logging("data_split")
+
 
 def split_data(path: str = "./../../input/scrape/", split_ratio: List[float] = [0.6, 0.2, 0.2], seed: int = 42,
                min_samples: int = 0):
@@ -29,7 +33,7 @@ def split_data(path: str = "./../../input/scrape/", split_ratio: List[float] = [
         files = [f for f in files if f.endswith('.mp3')]
 
         if len(files) == 0:
-            print(f"Warning: No files found in {folder}")
+            log.warning(f"No files found in {folder}")
 
         for file in files:
             file_path = str(os.path.join(path, folder, file))
@@ -37,7 +41,6 @@ def split_data(path: str = "./../../input/scrape/", split_ratio: List[float] = [
             df_dict["file_path"].append(file_path)
 
     df = pd.DataFrame(df_dict)
-    print("")
 
     # remove species with less than 3 samples
     species_counts = df["species_name"].value_counts()
@@ -47,18 +50,21 @@ def split_data(path: str = "./../../input/scrape/", split_ratio: List[float] = [
     # filtered species
     filtered_out_species = species_counts[species_counts < min_samples].index
     for species in filtered_out_species:
-        print(f"Filtered out species {species} with {species_counts[species]} samples")
+        log.warning(f"Filtered out species {species} with {species_counts[species]} samples")
 
     # one hot encode species_id as 1, 0
     species_dummies = pd.get_dummies(df["species_name"], prefix="species_name")
     df = pd.concat([df, species_dummies], axis=1)
 
     if split_ratio is None:
+        log.critical("Split ratio must be provided")
         raise ValueError("Split ratio must be provided")
 
     if len(split_ratio) != 3:
+        log.critical("Split ratio must contain 3 values")
         raise ValueError("Split ratio must contain 3 values")
     if sum(split_ratio) != 1:
+        log.critical("Split ratio values must sum to 1")
         raise ValueError("Split ratio values must sum to 1")
 
     X = df["file_path"]
@@ -86,14 +92,14 @@ def split_data(path: str = "./../../input/scrape/", split_ratio: List[float] = [
     val_df = pd.concat([val_x, val_y], axis=1)
     test_df = pd.concat([test_x, test_y], axis=1)
 
-    print(f"Training set: {train_df.shape} samples")
-    print(f"Validation set: {val_df.shape} samples")
-    print(f"Test set: {test_df.shape} samples")
+    log.info(f"Training set: {train_df.shape} samples")
+    log.info(f"Validation set: {val_df.shape} samples")
+    log.info(f"Test set: {test_df.shape} samples")
 
     train_df.to_csv(path + "train.csv", index=False)
     val_df.to_csv(path + "val.csv", index=False)
     test_df.to_csv(path + "test.csv", index=False)
 
-    print(f"DataFrames saved to {path}")
+    log.info(f"DataFrames saved to {path}")
 
     return train_df, val_df, test_df

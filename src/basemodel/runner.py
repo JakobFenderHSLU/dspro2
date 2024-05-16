@@ -88,7 +88,7 @@ class BasemodelRunner:
         # Repeat for each epoch
         for epoch_iter in range(wandb.config.epochs):
             epoch = epoch_iter + 1
-            print(f'Epoch: {epoch}')
+            log.info(f'Epoch: {epoch}')
             wandb.log({"epoch": epoch})
             epoch_time = time.time()
 
@@ -96,7 +96,7 @@ class BasemodelRunner:
             test_time = time.time()
             for data in self.train_dl:
                 if test_time:
-                    print(f"Time to get batch: {time.time() - test_time}")
+                    log.info(f"Time to get batch: {time.time() - test_time}")
                     test_time = None
                 timestamp = time.time()
                 # Get the input features and target labels, and put them on the GPU

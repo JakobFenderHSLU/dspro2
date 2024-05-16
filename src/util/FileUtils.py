@@ -1,10 +1,12 @@
-import os
 import pathlib
-import sys
 import threading
+
 import pandas as pd
 
 from src.util.AudioUtil import AudioUtil
+from src.util.LoggerUtils import init_logging
+
+log = init_logging("file_utils")
 
 
 def _verify_files(df, result, verbose: bool = False):
@@ -24,7 +26,7 @@ def _verify_files(df, result, verbose: bool = False):
         except Exception as e:
             result["corrupted"].append(index)
             if verbose:
-                print(f"Corrupted: {file_path} - {e}")
+                log.info(f"Corrupted: {file_path} - {e}")
 
 
 def verify_data(df: pd.DataFrame, n_threads: int = 16, verbose: bool = False):
@@ -78,25 +80,25 @@ def print_results(df, result):
     """
 
     if result['not_exist']:
-        print(f"The following files do not exist:")
+        log.info(f"The following files do not exist:")
         for index in result['not_exist']:
-            print(f" - {index}: {df.iloc[index]['file_path']}")
+            log.info(f" - {index}: {df.iloc[index]['file_path']}")
     else:
-        print("All files exist.")
+        log.info("All files exist.")
 
     if result['not_mp3']:
-        print(f"The following files are not MP3 files:")
+        log.info(f"The following files are not MP3 files:")
         for index in result['not_mp3']:
-            print(f" - {index}: {df.iloc[index]['file_path']}")
+            log.info(f" - {index}: {df.iloc[index]['file_path']}")
     else:
-        print("All files are MP3 files.")
+        log.info("All files are MP3 files.")
 
     if result['corrupted']:
-        print(f"The following files are corrupted:")
+        log.info(f"The following files are corrupted:")
         for index in result['corrupted']:
-            print(f" - {index}: {df.iloc[index]['file_path']}")
+            log.info(f" - {index}: {df.iloc[index]['file_path']}")
     else:
-        print("All files are valid.")
+        log.info("All files are valid.")
 
 
 def validate(path: pathlib.Path, verbose: bool = False):
@@ -106,10 +108,10 @@ def validate(path: pathlib.Path, verbose: bool = False):
     if path.is_dir():
         files_to_verify = list(path.glob("*.csv"))
 
-        print("Verifying files:")
+        log.info("Verifying files:")
         for file in files_to_verify:
-            print(f" - {file}")
-        print("")
+            log.info(f" - {file}")
+        log.info("")
 
         for file in files_to_verify:
             df = pd.read_csv(file)
@@ -119,32 +121,32 @@ def validate(path: pathlib.Path, verbose: bool = False):
             for file_index in result["not_exist"] + result["not_mp3"] + result["corrupted"]:
                 files_to_delete.append(df.iloc[file_index]["file_path"])
 
-        print("")
-        print("Results:")
-        print("-" * 20)
+        log.info("")
+        log.info("Results:")
+        log.info("-" * 20)
         for file, result in zip(files_to_verify, results):
-            print(f"{file} ({result['duration']})")
+            log.info(f"{file} ({result['duration']})")
             print_results(pd.read_csv(file), result)
-            print("")
+            log.info("")
 
     if files_to_delete:
         # confirm deletion
-        print("Files to delete:")
+        log.info("Files to delete:")
         for file in files_to_delete:
-            print(f" - {file}")
+            log.info(f" - {file}")
 
-        print("")
-        print("Do you want to delete these files? (Y/n)")
+        log.info("")
+        log.info("Do you want to delete these files? (Y/n)")
         response = input()
         if response.lower() == "n" or response.lower() == "no":
-            print("Aborted.")
+            log.info("Aborted.")
             exit()
 
         for file in files_to_delete:
             path_to_del = pathlib.Path(file)
             path_to_del.unlink()
-            print(f"Deleted file from disk: {file}")
+            log.info(f"Deleted file from disk: {file}")
 
-        print("Deletion finished.")
-        print("")
-        print("Please run 'python split.py' to remove the entries from the CSV files and balance the dataset.")
+        log.info("Deletion finished.")
+        log.info("")
+        log.info("Please run 'python split.py' to remove the entries from the CSV files and balance the dataset.")

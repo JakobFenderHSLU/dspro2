@@ -1,6 +1,9 @@
 import argparse
 
 from src.util.DataSplitUtil import split_data
+from src.util.LoggerUtils import init_logging
+
+log = init_logging("split")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -24,17 +27,17 @@ if __name__ == "__main__":
     if args.min is None:
         args.min = 0
 
-    print("Arguments:")
-    print(f"Path: {args.path}")
-    print(f"Ratios: {args.ratios}")
-    print(f"Seed: {args.seed}")
-    print(f"Minimum samples per class: {args.min}")
+    log.info("Arguments:")
+    log.info(f"Path: {args.path}")
+    log.info(f"Ratios: {args.ratios}")
+    log.info(f"Seed: {args.seed}")
+    log.info(f"Minimum samples per class: {args.min}")
 
     # confirm before proceeding
     if args.yes is None:
         proceed = input("Proceed with splitting data? [Y/n]: ")
         if proceed.lower() == "n" or proceed.lower() == "no":
-            print("Exiting...")
+            log.info("Exiting...")
             exit()
 
     split_data(args.path, args.ratios, args.seed, args.min)

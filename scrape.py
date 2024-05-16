@@ -1,6 +1,9 @@
 import argparse
 
 from src.scrape.example import example
+from src.util.LoggerUtils import init_logging
+
+log = init_logging("scrape")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -8,6 +11,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    print(args.full)
+    log.info(args.full)
 
     example()
