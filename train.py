@@ -1,14 +1,17 @@
 import argparse
+import logging
 import os
 import pathlib
-import logging
 
 import pandas as pd
 import torch
 
 from src.basemodel.runner import BasemodelRunner
 from src.util.FileUtils import validate
+from src.util.LoggerUtils import init_logging
 from src.util.ScaleUtil import convert_to_small, convert_to_debug
+
+log = init_logging("train", level=logging.INFO)
 
 POSSIBLE_MODELS = ["cnn", "cnn-transfer"]
 POSSIBLE_SCALES = ["full", "small", "debug"]
@@ -27,8 +30,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if not torch.cuda.is_available() and not args.cpu:
-        print("CUDA not available. Please make sure you have a CUDA-enabled GPU. "
-              "If you want to train on CPU, use the --cpu flag.")
+        log.critical("CUDA not available. Please make sure you have a CUDA-enabled GPU. "
+                     "If you want to train on CPU, use the --cpu flag.")
         exit()
 
     if args.path is None:
@@ -57,13 +60,12 @@ if __name__ == "__main__":
 
         elif args.scale == "debug":
             train_df, val_df = convert_to_debug(train_df, val_df)
-            logging.basicConfig(level=logging.DEBUG)
 
         if args.model == "cnn":
-            print("Training base cnn model...")
+            log.info("Training base cnn model...")
             runner = BasemodelRunner(train_df, val_df)
             runner.run()
-            print("Training complete!")
+            log.info("Training complete!")
 
         elif args.model == "cnn-transfer":
-            print("Training transfer learning model...")
+            log.info("Training transfer learning model...")

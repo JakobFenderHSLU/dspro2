@@ -1,3 +1,4 @@
+import logging
 import time
 
 import numpy as np
@@ -13,10 +14,9 @@ from torch.utils.data import DataLoader
 
 from src.basemodel.classifier import AudioClassifier
 from src.basemodel.dataset import SoundDS
+from src.util.LoggerUtils import init_logging
 
-torch.cuda.is_available()
-if not torch.cuda.is_available():
-    raise Exception("GPU not available")
+log = init_logging("basemodel", level=logging.INFO)
 
 
 class BasemodelRunner:
@@ -44,12 +44,14 @@ class BasemodelRunner:
                 "anneal_strategy": {"values": ["linear"]},
             }
         }
+        log.info("Starting sweep")
+        log.debug(sweep_config)
         sweep_id: str = wandb.sweep(sweep=sweep_config, project="Baseline-Full", entity="swiss-birder")
         wandb.agent(sweep_id, function=self._run, count=50)
 
     def _run(self) -> None:
         run = wandb.init()
-        print(f"Using device {self.device}")
+        log.info(f"Using device {self.device}")
 
         train_ds = SoundDS(self.train_df, self.device)
         val_ds = SoundDS(self.val_df, self.device)
@@ -70,12 +72,12 @@ class BasemodelRunner:
         model_name = f"./output/{run.id}_{run.name}_model.onnx"
         torch.onnx.export(self.model, torch.randn(1, 2, 64, 64).to(self.device), model_name)
 
-        print(f"Model saved to {model_name}")
+        log.info(f"Model saved to {model_name}")
         wandb.save(model_name)
         wandb.finish()
 
     def _training(self) -> None:
-        print("Starting Training")
+        log.info("Starting Training")
         # Loss Function, Optimizer and Scheduler
         optimizer: Optimizer = torch.optim.Adam(self.model.parameters(), lr=wandb.config.learning_rate)
         scheduler: OneCycleLR = OneCycleLR(optimizer, max_lr=wandb.config.learning_rate,
@@ -131,11 +133,11 @@ class BasemodelRunner:
 
             self._inference()
 
-            print(f"Epoch time: {int(epoch_duration // 60)} min {int(epoch_duration % 60)} sec")
-        print('Finished Training')
+            log.info(f"Epoch time: {int(epoch_duration // 60)} min {int(epoch_duration % 60)} sec")
+        log.info('Finished Training')
 
     def _inference(self):
-        print("Starting Inference")
+        log.info("Starting Inference")
         # Disable gradient updates
         with (torch.no_grad()):
             y_pred = []
@@ -170,4 +172,4 @@ class BasemodelRunner:
 
             wandb.log({"val/acc": accuracy_score(y_true, y_pred)})
             wandb.log({"val/f1": f1_score(y_true, y_pred, average='weighted')})
-        print('Finished Inference')
+        log.info('Finished Inference')
