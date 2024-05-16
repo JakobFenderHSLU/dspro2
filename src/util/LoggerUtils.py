@@ -1,6 +1,7 @@
 import logging
 import sys
 
+# https://stackoverflow.com/questions/35325042/python-logging-disable-logging-from-imported-modules
 
 def init_logging(name: str, level: int = logging.INFO) -> logging.Logger:
     log = logging.getLogger(name)

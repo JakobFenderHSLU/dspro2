@@ -20,7 +20,7 @@ log = init_logging("basemodel", level=logging.INFO)
 
 
 class BasemodelRunner:
-    def __init__(self, train_df, val_df) -> None:
+    def __init__(self, train_df: pd.DataFrame, val_df: pd.DataFrame, verbose: bool) -> None:
         self.train_df: pd.DataFrame = train_df
         self.val_df: pd.DataFrame = val_df
         self.train_dl: DataLoader = None
@@ -28,8 +28,10 @@ class BasemodelRunner:
         self.class_counts: int = len(train_df.columns) - 1
         self.device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model: AudioClassifier = None
-
         self.loss_function: CrossEntropyLoss = nn.CrossEntropyLoss()
+
+        if verbose:
+            log.setLevel(logging.DEBUG)
 
     def run(self) -> None:
         sweep_config: dict = {

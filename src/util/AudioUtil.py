@@ -1,6 +1,5 @@
 # This file was created with the help of the following tutorial:
 # https://towardsdatascience.com/audio-deep-learning-made-simple-sound-classification-step-by-step-cebc936bbe5
-
 import random
 
 import torch
@@ -11,7 +10,7 @@ from torchaudio import transforms
 
 class AudioUtil:
     @staticmethod
-    def open(audio_file) -> (torch.Tensor, int):
+    def open(audio_file: str) -> (torch.Tensor, int):
         """
         Load an audio file. Return the signal as a tensor and the sample rate
         :param audio_file: the path to the audio file

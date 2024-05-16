@@ -63,7 +63,7 @@ if __name__ == "__main__":
 
         if args.model == "cnn":
             log.info("Training base cnn model...")
-            runner = BasemodelRunner(train_df, val_df)
+            runner = BasemodelRunner(train_df, val_df, args.verbose)
             runner.run()
             log.info("Training complete!")
 
