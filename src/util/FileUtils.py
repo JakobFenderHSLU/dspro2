@@ -9,7 +9,7 @@ from src.util.LoggerUtils import init_logging
 log = init_logging("file_utils")
 
 
-def _verify_files(df, result, verbose: bool = False):
+def _verify_files(df, result):
     for index, row in df.iterrows():
         file_path = pathlib.Path(row["file_path"])
 
@@ -25,16 +25,14 @@ def _verify_files(df, result, verbose: bool = False):
             AudioUtil.open(file_path)
         except Exception as e:
             result["corrupted"].append(index)
-            if verbose:
-                log.info(f"Corrupted: {file_path} - {e}")
+            log.debug(f"Corrupted: {file_path} - {e}")
 
 
-def verify_data(df: pd.DataFrame, n_threads: int = 16, verbose: bool = False):
+def verify_data(df: pd.DataFrame, n_threads: int = 16):
     """
     Verify that the files in the DataFrame exist and the Audio files are not corrupted.
     :param df: DataFrame with the file paths
     :param n_threads: Number of threads to use
-    :param verbose: If True, print additional information
     :return: not_exist, not_mp3, corrupted
     """
 
@@ -55,14 +53,14 @@ def verify_data(df: pd.DataFrame, n_threads: int = 16, verbose: bool = False):
             start = i * chunk_size
             end = (i + 1) * chunk_size if i < n_threads - 1 else len(df)
 
-            thread = threading.Thread(target=_verify_files, args=(df.iloc[start:end], result, verbose))
+            thread = threading.Thread(target=_verify_files, args=(df.iloc[start:end], result))
             threads.append(thread)
             thread.start()
 
         for thread in threads:
             thread.join()
     else:
-        _verify_files(df, result, verbose)
+        _verify_files(df, result)
 
     duration = pd.Timestamp.now() - timestamp
     # formatted duration
@@ -101,7 +99,11 @@ def print_results(df, result):
         log.info("All files are valid.")
 
 
-def validate(path: pathlib.Path, verbose: bool = False):
+def validate(path: pathlib.Path, verbose: bool = False) -> None:
+
+    if verbose:
+        log.setLevel("DEBUG")
+
     results = []
     files_to_delete = []
 
@@ -115,7 +117,7 @@ def validate(path: pathlib.Path, verbose: bool = False):
 
         for file in files_to_verify:
             df = pd.read_csv(file)
-            result = verify_data(df, verbose=verbose)
+            result = verify_data(df)
 
             results.append(result)
             for file_index in result["not_exist"] + result["not_mp3"] + result["corrupted"]:

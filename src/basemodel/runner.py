@@ -44,8 +44,6 @@ class BasemodelRunner:
                 "anneal_strategy": {"values": ["linear"]},
             }
         }
-        log.info("Starting sweep")
-        log.debug(sweep_config)
         sweep_id: str = wandb.sweep(sweep=sweep_config, project="Baseline-Full", entity="swiss-birder")
         wandb.agent(sweep_id, function=self._run, count=50)
 
