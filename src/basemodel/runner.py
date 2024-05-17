@@ -44,6 +44,7 @@ class BasemodelRunner:
                 "batch_size_train": {"values": [64]},  # try higher
                 "batch_size_val": {"values": [64]},  # try higher
                 "anneal_strategy": {"values": ["linear"]},
+                "n_mels": {"values": [64]},  # try
             }
         }
         log.debug(f"Starting sweep with config:")
@@ -55,6 +56,10 @@ class BasemodelRunner:
 
     def _run(self) -> None:
         run = wandb.init()
+
+        hyperparameters = {
+            "n_mels": wandb.config.n_mels,
+        }
 
         train_ds = SoundDS(self.train_df, self.device)
         val_ds = SoundDS(self.val_df, self.device)
@@ -126,8 +131,8 @@ class BasemodelRunner:
                 # Normalize the inputs
                 # todo: check how to normalize spectrograms
                 # log(1 + spectrogram)
-                # inputs = log(1 + inputs)
-                # inputs_log: Tensor = torch.log1p(inputs)
+                inputs = log(1 + inputs)
+                inputs_log: Tensor = torch.log1p(inputs)
                 # print(inputs.max())
 
                 # Zero the parameter gradients

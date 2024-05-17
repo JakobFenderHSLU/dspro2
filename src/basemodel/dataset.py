@@ -1,7 +1,5 @@
-import time
 from typing import Tuple
 
-import h5py
 import torch
 from torch.utils.data import Dataset
 
@@ -9,12 +7,15 @@ from src.util.AudioUtil import AudioUtil
 
 
 class SoundDS(Dataset):
-    def __init__(self, df, device):
+    def __init__(self, df, hyperparams, device):
         self.df = df
         self.device = device
         self.duration = 30000
         self.sr = 44100
         self.channel = 2
+        if hyperparams is not None:
+            if "n_mels" in hyperparams:
+                self.n_mels = hyperparams['n_mels']
         # self.shift_pct = 0.4
 
     def __len__(self):
@@ -27,7 +28,7 @@ class SoundDS(Dataset):
         audio = AudioUtil.rechannel(audio, self.channel)
         audio = AudioUtil.pad_trunc(audio, self.duration)
         # audio = AudioUtil.time_shift(audio, self.shift_pct)
-        spectrogram = AudioUtil.spectro_gram(audio, n_mels=64, n_fft=1024, hop_len=None)
+        spectrogram = AudioUtil.spectrogram(audio, n_mels=self.n_mels, n_fft=1024, hop_len=None)
         # spectrogram = AudioUtil.spectro_augment(spectrogram, max_mask_pct=0.1, n_freq_masks=2, n_time_masks=2)
 
         return spectrogram
@@ -38,4 +39,3 @@ class SoundDS(Dataset):
         data = self.df.iloc[idx, 1:].values
         label = torch.Tensor(data.astype(int))
         return augmented_spectrogram, label.to(self.device)
-
