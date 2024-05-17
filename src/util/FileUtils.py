@@ -20,8 +20,6 @@ def _verify_files(df, result):
             result["not_mp3"].append(index)
 
         try:
-            # Note (Jakob): This outputs a lot of useless information and spams the console.
-            # I have not found a way to suppress it.
             AudioUtil.open(file_path)
         except Exception as e:
             result["corrupted"].append(index)

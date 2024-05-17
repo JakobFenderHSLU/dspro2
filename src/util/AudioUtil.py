@@ -16,6 +16,8 @@ class AudioUtil:
         :param audio_file: the path to the audio file
         :return: a tuple containing the signal and the sample rate
         """
+        # Note (Jakob): This outputs a lot of useless information and spams the console.
+        # I have not found a way to suppress it.
         sig, sr = torchaudio.load(audio_file)
         return sig, sr
 
