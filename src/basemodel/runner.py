@@ -16,7 +16,7 @@ from src.basemodel.classifier import AudioClassifier
 from src.basemodel.dataset import SoundDS
 from src.util.LoggerUtils import init_logging
 
-log = init_logging("basemodel", level=logging.INFO)
+log = init_logging("basemodel")
 
 
 class BasemodelRunner:

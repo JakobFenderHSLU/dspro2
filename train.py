@@ -11,7 +11,7 @@ from src.util.FileUtils import validate
 from src.util.LoggerUtils import init_logging
 from src.util.ScaleUtil import convert_to_small, convert_to_debug
 
-log = init_logging("train", level=logging.INFO)
+log = init_logging("train")
 
 POSSIBLE_MODELS = ["cnn", "cnn-transfer"]
 POSSIBLE_SCALES = ["full", "small", "debug"]

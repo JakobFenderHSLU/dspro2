@@ -28,3 +28,9 @@ Run the following script to train the model: `python train.py`
 The script validates all entries before training the model.   
 
 For further information run: `python train.py --help`
+
+## Logs
+The logs are stored in the `logs` directory. To view the logs in real-time, run the following commands:
+- Linux/Mac: `tail -f logs/app.log`
+- Windows: `Get-Content logs/app.log -Wait`
+- Integrated in PyCharm [Guide](https://www.jetbrains.com/help/pycharm/setting-log-options.html)
