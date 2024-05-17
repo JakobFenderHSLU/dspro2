@@ -44,6 +44,7 @@ class BasemodelRunner:
                 "batch_size_train": {"values": [64]},  # try higher
                 "batch_size_val": {"values": [64]},  # try higher
                 "anneal_strategy": {"values": ["linear"]},
+                "normalize": {"values": [True, False]},
                 "n_mels": {"values": [64]},  # try
             }
         }
@@ -57,12 +58,13 @@ class BasemodelRunner:
     def _run(self) -> None:
         run = wandb.init()
 
-        hyperparameters = {
+        params = {
             "n_mels": wandb.config.n_mels,
+            "normalize": wandb.config.normalize,
         }
 
-        train_ds = SoundDS(self.train_df, hyperparameters, self.device)
-        val_ds = SoundDS(self.val_df, hyperparameters, self.device)
+        train_ds = SoundDS(self.train_df, params, self.device)
+        val_ds = SoundDS(self.val_df, params, self.device)
 
         log.debug(f"Train DS length: {len(train_ds)}")
         log.debug(f"Val DS length: {len(val_ds)}")
@@ -128,13 +130,6 @@ class BasemodelRunner:
                     if inputs[i].sum() == 0:
                         log.error(f"Tensor with label {labels[i]} is empty")
 
-                # Normalize the inputs
-                # todo: check how to normalize spectrograms
-                # log(1 + spectrogram)
-                inputs = log(1 + inputs)
-                inputs_log: Tensor = torch.log1p(inputs)
-                # print(inputs.max())
-
                 # Zero the parameter gradients
                 optimizer.zero_grad()
 
@@ -193,12 +188,6 @@ class BasemodelRunner:
                         log.error(f"Tensor with label {labels[i]} is empty")
 
                 y_true.extend(labels.cpu().numpy())
-
-                # Normalize the inputs
-                # normalize with infos from training set
-                # inputs_m: Tensor = inputs.mean()
-                # inputs_s: Tensor = inputs.std()
-                # inputs: Tensor = (inputs - inputs_m) / inputs_s
 
                 # Get predictions
                 preds: Tensor = self.model(inputs)

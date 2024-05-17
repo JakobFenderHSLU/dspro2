@@ -7,16 +7,26 @@ from src.util.AudioUtil import AudioUtil
 
 
 class SoundDS(Dataset):
-    def __init__(self, df, hyperparams, device):
+    def __init__(self, df, params, device):
         self.df = df
         self.device = device
         self.duration = 30000
         self.sr = 44100
         self.channel = 2
-        if hyperparams is not None:
-            if "n_mels" in hyperparams:
-                self.n_mels = hyperparams['n_mels']
-        # self.shift_pct = 0.4
+
+        if params is None:
+            params = {}
+
+        default_params = {
+            "n_mels": 64,
+            "normalize": True,
+        }
+
+        for key in default_params.keys():
+            if key not in params:
+                params[key] = default_params[key]
+
+        self.params = params
 
     def __len__(self):
         return len(self.df)
@@ -27,9 +37,9 @@ class SoundDS(Dataset):
         audio = AudioUtil.resample((sig, sr), self.sr)
         audio = AudioUtil.rechannel(audio, self.channel)
         audio = AudioUtil.pad_trunc(audio, self.duration)
-        # audio = AudioUtil.time_shift(audio, self.shift_pct)
-        spectrogram = AudioUtil.spectrogram(audio, n_mels=self.n_mels, n_fft=1024, hop_len=None)
-        # spectrogram = AudioUtil.spectro_augment(spectrogram, max_mask_pct=0.1, n_freq_masks=2, n_time_masks=2)
+        spectrogram = AudioUtil.spectrogram(audio, n_fft=1024, hop_len=None,
+                                            n_mels=self.params["n_mels"],
+                                            normalize=self.params["normalize"])
 
         return spectrogram
 

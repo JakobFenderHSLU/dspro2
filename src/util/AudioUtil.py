@@ -115,7 +115,8 @@ class AudioUtil:
         return signal.roll(shift_amt), sampling_rate
 
     @staticmethod
-    def spectrogram(aud, n_mels=64, n_fft=1024, hop_len=None) -> torch.Tensor:
+    def spectrogram(aud: Tensor, n_mels: int = 64, n_fft: int = 1024, hop_len=None,
+                    normalize: bool = True) -> torch.Tensor:
         """
         Create a spectrogram from a raw audio signal
         :param aud: the audio
@@ -128,8 +129,16 @@ class AudioUtil:
         top_db = 80
 
         # spec has shape [channel, n_mels, time], where channel is mono, stereo etc
-        spec_transform = transforms.MelSpectrogram(sampling_rate, n_fft=n_fft, hop_length=hop_len, n_mels=n_mels).to(signal.device)
+        spec_transform = transforms.MelSpectrogram(sampling_rate,
+                                                   n_fft=n_fft,
+                                                   hop_length=hop_len,
+                                                   n_mels=n_mels).to(signal.device)
         spectrogram = spec_transform(signal)
+
+        if normalize:
+            # log(1 + x)
+            # see https://stackoverflow.com/questions/72785857/normalize-a-melspectrogram-to-0-255-with-or-without-frequency-scaling
+            spectrogram = torch.log1p(spectrogram)
 
         # Convert to decibels
         spectrogram = transforms.AmplitudeToDB(top_db=top_db)(spectrogram)
