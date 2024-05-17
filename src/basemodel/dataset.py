@@ -28,9 +28,9 @@ class SoundDS(Dataset):
         audio = AudioUtil.pad_trunc(audio, self.duration)
         # audio = AudioUtil.time_shift(audio, self.shift_pct)
         spectrogram = AudioUtil.spectro_gram(audio, n_mels=64, n_fft=1024, hop_len=None)
-        augmented_spectrogram = AudioUtil.spectro_augment(spectrogram, max_mask_pct=0.1, n_freq_masks=2, n_time_masks=2)
+        # spectrogram = AudioUtil.spectro_augment(spectrogram, max_mask_pct=0.1, n_freq_masks=2, n_time_masks=2)
 
-        return augmented_spectrogram
+        return spectrogram
 
     def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor]:
         audio_file = self.df.loc[idx, 'file_path']

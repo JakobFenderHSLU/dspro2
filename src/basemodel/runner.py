@@ -39,32 +39,40 @@ class BasemodelRunner:
             "method": "grid",
             "metric": {"goal": "maximize", "name": "val_f1"},
             "parameters": {
-                "epochs": {"value": 20},
+                "epochs": {"value": 100},
                 "learning_rate": {"value": 0.1},  # {"min": 0.0001, "max": 0.1},
                 "batch_size_train": {"values": [64]},  # try higher
                 "batch_size_val": {"values": [64]},  # try higher
                 "anneal_strategy": {"values": ["linear"]},
             }
         }
+        log.debug(f"Starting sweep with config:")
+        log.debug(sweep_config)
         sweep_id: str = wandb.sweep(sweep=sweep_config, project="Baseline-Full", entity="swiss-birder")
-        wandb.agent(sweep_id, function=self._run, count=50)
+        log.debug("started sweep with id: {sweep_id}")
+        log.info(f"Using device {self.device}")
+        wandb.agent(sweep_id, function=self._run, count=1)
 
     def _run(self) -> None:
         run = wandb.init()
-        log.info(f"Using device {self.device}")
 
         train_ds = SoundDS(self.train_df, self.device)
         val_ds = SoundDS(self.val_df, self.device)
 
-        self.train_dl = DataLoader(train_ds, batch_size=wandb.config.batch_size_train,
-                                   shuffle=True, num_workers=4, prefetch_factor=2)  # num_workers=4 prefetch_factor=2
-        self.val_dl = DataLoader(val_ds, batch_size=wandb.config.batch_size_val,
-                                 shuffle=False)  # num_workers=16 prefetch_factor=2
+        log.debug(f"Train DS length: {len(train_ds)}")
+        log.debug(f"Val DS length: {len(val_ds)}")
+
+        # num_workers=4 prefetch_factor=2 check out
+        # https://pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset
+        self.train_dl = DataLoader(train_ds, batch_size=wandb.config.batch_size_train, shuffle=True)
+        self.val_dl = DataLoader(val_ds, batch_size=wandb.config.batch_size_val, shuffle=False)
+
         self.model = AudioClassifier(self.class_counts).to(self.device)
 
         img = wandb.Image(self.val_dl.dataset[0][0][0].cpu().numpy())
         wandb.log({"val/img": img})
 
+        # Fix: wandb.watch(self.model, log="all") is not working
         wandb.watch(self.model, log="all")
         self._training()
         wandb.unwatch(self.model)
@@ -85,6 +93,7 @@ class BasemodelRunner:
                                            epochs=wandb.config.epochs,
                                            anneal_strategy=wandb.config.anneal_strategy)
 
+        is_first = True
         # Repeat for each epoch
         for epoch_iter in range(wandb.config.epochs):
             epoch = epoch_iter + 1
@@ -103,6 +112,18 @@ class BasemodelRunner:
                 inputs: Tensor = data[0].to(self.device)
                 labels: Tensor = data[1].to(self.device)
 
+                # first entry of batch
+                if is_first:
+                    log.debug(f"First entry of batch: ")
+                    log.debug("input")
+                    log.debug(inputs[0])
+                    log.debug("label")
+                    log.debug(labels[0])
+
+                for i in range(inputs.size(0)):
+                    if inputs[i].sum() == 0:
+                        log.error(f"Tensor with label {labels[i]} is empty")
+
                 # Normalize the inputs
                 # todo: check how to normalize spectrograms
                 # log(1 + spectrogram)
@@ -117,13 +138,20 @@ class BasemodelRunner:
                 preds: Tensor = self.model(inputs)
                 loss: Tensor = self.loss_function(preds, labels)
 
+                if is_first:
+                    log.debug("pred")
+                    log.debug(preds[0])
+                    log.debug("loss")
+                    log.debug(loss)
+
                 loss.backward()
                 optimizer.step()
                 scheduler.step()
 
+                is_first = False
+
                 # Keep stats for Loss and Accuracy
                 wandb.log({"train/loss": loss.item()})
-
                 wandb.log({"debug/time_per_batch": time.time() - timestamp})
 
             torch.cuda.synchronize()
@@ -142,10 +170,23 @@ class BasemodelRunner:
         with (torch.no_grad()):
             y_pred = []
             y_true = []
+
+            is_first = True
             for data in self.val_dl:
                 # Get the input features and target labels, and put them on the GPU
                 inputs: Tensor = data[0].to(self.device)
                 labels: Tensor = data[1].to(self.device)
+
+                if is_first:
+                    log.debug(f"First entry of batch: ")
+                    log.debug("input")
+                    log.debug(inputs[0])
+                    log.debug("label")
+                    log.debug(labels[0])
+
+                for i in range(inputs.size(0)):
+                    if inputs[i].sum() == 0:
+                        log.error(f"Tensor with label {labels[i]} is empty")
 
                 y_true.extend(labels.cpu().numpy())
 
@@ -158,6 +199,12 @@ class BasemodelRunner:
                 # Get predictions
                 preds: Tensor = self.model(inputs)
                 loss: Tensor = self.loss_function(preds, labels)
+
+                if is_first:
+                    log.debug("pred")
+                    log.debug(preds[0])
+                    log.debug("loss")
+                    log.debug(loss)
                 wandb.log({"val/loss": loss.item()})
 
                 # Count of predictions that matched the target label
@@ -169,6 +216,12 @@ class BasemodelRunner:
             new_y_pred[np.arange(len(y_pred)), y_pred_argmax] = 1
 
             y_pred = new_y_pred
+
+            if is_first:
+                log.debug("y_true")
+                log.debug(y_true[0])
+                log.debug("y_pred (argmax)")
+                log.debug(y_pred[0])
 
             wandb.log({"val/acc": accuracy_score(y_true, y_pred)})
             wandb.log({"val/f1": f1_score(y_true, y_pred, average='weighted')})
