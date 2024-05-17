@@ -39,7 +39,7 @@ class BasemodelRunner:
             "method": "grid",
             "metric": {"goal": "maximize", "name": "val_f1"},
             "parameters": {
-                "epochs": {"value": 100},
+                "epochs": {"value": 10000},
                 "learning_rate": {"value": 0.1},  # {"min": 0.0001, "max": 0.1},
                 "batch_size_train": {"values": [64]},  # try higher
                 "batch_size_val": {"values": [64]},  # try higher
@@ -70,7 +70,7 @@ class BasemodelRunner:
         self.model = AudioClassifier(self.class_counts).to(self.device)
 
         img = wandb.Image(self.val_dl.dataset[0][0][0].cpu().numpy())
-        wandb.log({"val/img": img})
+        wandb.log({"debug/img": img})
 
         # Fix: wandb.watch(self.model, log="all") is not working
         wandb.watch(self.model, log="all")
@@ -98,7 +98,6 @@ class BasemodelRunner:
         for epoch_iter in range(wandb.config.epochs):
             epoch = epoch_iter + 1
             log.info(f'Epoch: {epoch}')
-            wandb.log({"epoch": epoch})
             epoch_time = time.time()
 
             # Repeat for each batch in the training set
@@ -148,23 +147,23 @@ class BasemodelRunner:
                 optimizer.step()
                 scheduler.step()
 
+                for name, param in self.model.named_parameters():
+                    wandb.log({f"gradients/{name}": wandb.Histogram(param.grad.cpu().numpy())})
+
                 is_first = False
 
                 # Keep stats for Loss and Accuracy
-                wandb.log({"train/loss": loss.item()})
-                wandb.log({"debug/time_per_batch": time.time() - timestamp})
+                wandb.log({
+                    "train/loss": loss.item(),
+                    "debug/time_per_batch": time.time() - timestamp
+                })
 
-            torch.cuda.synchronize()
-
+            self._inference(epoch)
             epoch_duration = time.time() - epoch_time
-            wandb.log({"epoch_duration": epoch_duration})
-
-            self._inference()
-
             log.info(f"Epoch time: {int(epoch_duration // 60)} min {int(epoch_duration % 60)} sec")
         log.info('Finished Training')
 
-    def _inference(self):
+    def _inference(self, epoch: int) -> None:
         log.info("Starting Inference")
         # Disable gradient updates
         with (torch.no_grad()):
@@ -205,7 +204,6 @@ class BasemodelRunner:
                     log.debug(preds[0])
                     log.debug("loss")
                     log.debug(loss)
-                wandb.log({"val/loss": loss.item()})
 
                 # Count of predictions that matched the target label
                 y_pred.extend(preds.cpu().numpy())
@@ -223,6 +221,24 @@ class BasemodelRunner:
                 log.debug("y_pred (argmax)")
                 log.debug(y_pred[0])
 
-            wandb.log({"val/acc": accuracy_score(y_true, y_pred)})
-            wandb.log({"val/f1": f1_score(y_true, y_pred, average='weighted')})
+            wandb.log({
+                "val/acc": accuracy_score(y_true, y_pred),
+                "val/f1": f1_score(y_true, y_pred, average='weighted')
+            })
+            # check if sum of y_true is 0
+
+            # confusion matrix
+            # onehot to label
+            y_true = np.argmax(y_true, axis=1)
+            y_pred = np.argmax(y_pred, axis=1)
+
+            if is_first:
+                log.debug("y_true (argmax)")
+                log.debug(y_true[0])
+                log.debug("y_pred (argmax)")
+                log.debug(y_pred[0])
+
+            # create confusion matrix
+            wandb.log({"val/confusion_matrix": wandb.plot.confusion_matrix(y_true=y_true, preds=y_pred)})
+
         log.info('Finished Inference')
