@@ -61,8 +61,8 @@ class BasemodelRunner:
             "n_mels": wandb.config.n_mels,
         }
 
-        train_ds = SoundDS(self.train_df, self.device)
-        val_ds = SoundDS(self.val_df, self.device)
+        train_ds = SoundDS(self.train_df, hyperparameters, self.device)
+        val_ds = SoundDS(self.val_df, hyperparameters, self.device)
 
         log.debug(f"Train DS length: {len(train_ds)}")
         log.debug(f"Val DS length: {len(val_ds)}")
