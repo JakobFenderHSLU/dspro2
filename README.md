@@ -13,9 +13,7 @@ Installed Python 3.8 or higher.
 4. Install the requirements with `pip install -r requirements.txt`
 
 ### 1. Scrape the newest data from Xeno Canto
-TODO: Alvin 
 Run the following script to scrape data from xeno-canto.org: `python scrape.py`
-
 
 ### 2. Create a data split
 Run the following script to create a data split: `python split.py`
