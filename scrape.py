@@ -41,11 +41,13 @@ def main():
     cleaner.clean_files()
 
     # Copy cleaned files to the noise removal directory
-    for filename in os.listdir(audio_files_no_removal_dir):
-        src_path = os.path.join(audio_files_no_removal_dir, filename)
-        dest_path = os.path.join(audio_files_base_dir, filename)
-        shutil.copy(src_path, dest_path)  
-        log.info(f"Copied {src_path} to {dest_path} for noise removal.")
+    for folder_name in os.listdir(audio_files_no_removal_dir):
+        os.makedirs(os.path.join(audio_files_base_dir, folder_name), exist_ok=True)
+        for filename in os.listdir(os.path.join(audio_files_no_removal_dir, folder_name)):
+            src_path = os.path.join(audio_files_no_removal_dir, folder_name, filename)
+            dest_path = os.path.join(audio_files_base_dir, folder_name, filename)
+            shutil.copy(src_path, dest_path)
+            log.info(f"Copied {src_path} to {dest_path} for noise removal.")
 
     # Remove background noise
     log.info("Starting noise removal.")
