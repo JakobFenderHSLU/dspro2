@@ -3,7 +3,7 @@ from src.scrape.cleaner import Cleaner
 from src.scrape.noise_remover import NoiseRemover
 from src.scrape.merge_csv import MergeCSV
 from src.util.LoggerUtils import init_logging
-from src.scrape import species_list 
+from src.scrape.bird_species import species_list
 
 import argparse
 import shutil
