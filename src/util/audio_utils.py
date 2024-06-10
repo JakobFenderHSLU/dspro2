@@ -141,7 +141,7 @@ class AudioUtil:
             spectrogram = torch.log1p(spectrogram)
 
         # Convert to decibels
-        spectrogram = transforms.AmplitudeToDB(top_db=top_db)(spectrogram)
+        # spectrogram = transforms.AmplitudeToDB(top_db=top_db)(spectrogram)
         return spectrogram
 
     @staticmethod

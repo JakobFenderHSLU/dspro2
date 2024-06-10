@@ -1,15 +1,15 @@
 import argparse
-import logging
 import os
 import pathlib
+import time
 
 import pandas as pd
 import torch
 
 from src.basemodel.runner import BasemodelRunner
-from src.util.FileUtils import validate
-from src.util.LoggerUtils import init_logging
-from src.util.ScaleUtil import convert_to_small, convert_to_debug
+from src.util.file_utils import validate
+from src.util.logger_utils import init_logging
+from src.util.scale_utils import convert_to_small, convert_to_debug
 
 log = init_logging("train")
 
@@ -27,6 +27,8 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--scale", default=POSSIBLE_SCALES[0], const=POSSIBLE_SCALES[0],
                         choices=POSSIBLE_SCALES, help="scale of the dataset", nargs='?')
 
+    script_start_time = time.time()
+
     args = parser.parse_args()
 
     if not torch.cuda.is_available() and not args.cpu:
@@ -35,7 +37,7 @@ if __name__ == "__main__":
         exit()
 
     if args.path is None:
-        args.path = "./input/scrape/"
+        args.path = "./input/scrape/segmented/"
 
     path = pathlib.Path(args.path)
 
@@ -52,7 +54,7 @@ if __name__ == "__main__":
 
         elif args.scale == "small":
             # most samples per species in the first 7 species
-            train_df, val_df = convert_to_small(train_df, val_df)
+            train_df, val_df = convert_to_small(train_df, val_df, 4)
 
             # Set environment variables for debugging
             os.environ['CUDA_LAUNCH_BLOCKING'] = '0'  # Synchronizes CPU and GPU
@@ -65,7 +67,10 @@ if __name__ == "__main__":
             log.info("Training base cnn model...")
             runner = BasemodelRunner(train_df, val_df, args.scale)
             runner.run()
-            log.info("Training complete!")
 
         elif args.model == "cnn-transfer":
             log.info("Training transfer learning model...")
+
+    # HH:MM:SS
+    formatted_duration = time.strftime("%H:%M:%S", time.gmtime(time.time() - script_start_time))
+    log.info(f"Training complete! (Time taken: {formatted_duration})")

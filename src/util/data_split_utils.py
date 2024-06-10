@@ -4,7 +4,7 @@ from typing import List
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-from src.util.LoggerUtils import init_logging
+from src.util.logger_utils import init_logging
 
 log = init_logging("data_split")
 

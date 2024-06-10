@@ -1,7 +1,7 @@
 import argparse
 
-from src.util.DataSplitUtil import split_data
-from src.util.LoggerUtils import init_logging
+from src.util.data_split_utils import split_data
+from src.util.logger_utils import init_logging
 
 log = init_logging("split")
 

@@ -3,8 +3,8 @@ import threading
 
 import pandas as pd
 
-from src.util.AudioUtil import AudioUtil
-from src.util.LoggerUtils import init_logging
+from src.util.audio_utils import AudioUtil
+from src.util.logger_utils import init_logging
 
 log = init_logging("file_utils")
 
