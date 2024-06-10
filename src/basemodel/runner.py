@@ -3,6 +3,7 @@ import time
 import numpy as np
 import pandas as pd
 import torch
+import torchaudio
 import wandb
 from sklearn.metrics import f1_score, accuracy_score
 from torch import nn, Tensor
@@ -13,8 +14,11 @@ from torch.utils.data import DataLoader
 
 from src.basemodel.classifier import AudioClassifier
 from src.basemodel.dataset import SoundDS
-from src.util.LoggerUtils import init_logging
-from src.util.ScaleUtil import convert_to_small
+from src.transformer.loop_trunk_transformer import LoopTrunkTransformer
+from src.transformer.normalize_transformer import NormalizeTransformer
+from src.transformer.recannel_transformer import RechannelTransformer
+from src.transformer.resample_transformer import ResampleTransformer
+from src.util.logger_utils import init_logging
 
 log = init_logging("basemodel")
 
@@ -27,7 +31,7 @@ class BasemodelRunner:
         self.val_dl: DataLoader = None
         self.device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model: AudioClassifier = None
-        self.loss_function: CrossEntropyLoss = nn.CrossEntropyLoss()
+        self.loss_function: CrossEntropyLoss = nn.CrossEntropyLoss().to(self.device)
         self.scale: str = scale
 
     @property
@@ -45,13 +49,17 @@ class BasemodelRunner:
                 "batch_size_train": {"values": [64]},  # try higher
                 "batch_size_val": {"values": [64]},  # try higher
                 "anneal_strategy": {"values": ["linear"]},
-                "normalize": {"values": [True]},  # Through testing, normalization is better
+
+                # Parameters for SpectrogramPipeline
+                "sample_rate": {"values": [44_100]},
+                "channel": {"values": [2]},
+                "duration_ms": {"values": [30_000]},
                 "n_mels": {"values": [64]},  # {"min": 32, "max": 128},
+                "n_fft": {"values": [1024]},
+                "normalize": {"values": [True]},  # Through testing, normalization is better
             },
             "optimizer": ["adam"],
         }
-        if self.scale == "small":
-            sweep_config["parameters"]["label_count"] = {"values": [4, 8, 16, 32]}
 
         log.debug(f"Starting sweep with config:")
         log.debug(sweep_config)
@@ -63,21 +71,25 @@ class BasemodelRunner:
     def _run(self) -> None:
         run = wandb.init()
 
-        params = {
-            "n_mels": wandb.config.n_mels,
-            "normalize": wandb.config.normalize,
-        }
+        transformers = torch.nn.Sequential(
+            ResampleTransformer(sample_rate=wandb.config.sample_rate),
+            RechannelTransformer(channel=wandb.config.channel),
+            LoopTrunkTransformer(duration_ms=wandb.config.duration_ms, sample_rate=wandb.config.sample_rate),
+            torchaudio.transforms.MelSpectrogram(
+                sample_rate=wandb.config.sample_rate,
+                n_mels=wandb.config.n_mels,
+                n_fft=wandb.config.n_fft
+            ),
+            NormalizeTransformer()
+        )
 
-        if self.scale == "small":
-            self.train_df, self.val_df = convert_to_small(self.train_df, self.val_df, wandb.config.label_count)
-
-        train_ds = SoundDS(self.train_df, params, self.device)
-        val_ds = SoundDS(self.val_df, params, self.device)
+        train_ds = SoundDS(self.train_df, transform=transformers)
+        val_ds = SoundDS(self.val_df, transform=transformers)
 
         log.debug(f"Train DS length: {len(train_ds)}")
         log.debug(f"Val DS length: {len(val_ds)}")
 
-        # num_workers=4 prefetch_factor=2 check out
+        # num_workers=32 (equals or less than amount of CPUs) prefetch_factor=2 check out
         # https://pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset
         self.train_dl = DataLoader(train_ds, batch_size=wandb.config.batch_size_train, shuffle=True)
         self.val_dl = DataLoader(val_ds, batch_size=wandb.config.batch_size_val, shuffle=False)
