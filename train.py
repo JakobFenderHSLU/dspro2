@@ -51,7 +51,7 @@ if __name__ == "__main__":
             os.environ['TORCH_USE_CUDA_DSA'] = '0'
 
         elif args.scale == "small":
-            # most samples per species in the first 10 species
+            # most samples per species in the first 7 species
             train_df, val_df = convert_to_small(train_df, val_df)
 
             # Set environment variables for debugging
@@ -63,7 +63,7 @@ if __name__ == "__main__":
 
         if args.model == "cnn":
             log.info("Training base cnn model...")
-            runner = BasemodelRunner(train_df, val_df, args.verbose)
+            runner = BasemodelRunner(train_df, val_df, args.scale)
             runner.run()
             log.info("Training complete!")
 

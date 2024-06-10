@@ -37,10 +37,8 @@ class SoundDS(Dataset):
         audio = AudioUtil.resample((sig, sr), self.sr)
         audio = AudioUtil.rechannel(audio, self.channel)
         audio = AudioUtil.pad_trunc(audio, self.duration)
-        spectrogram = AudioUtil.spectrogram(audio, n_fft=1024, hop_len=None,
-                                            n_mels=self.params["n_mels"],
+        spectrogram = AudioUtil.spectrogram(audio, n_fft=1024, hop_len=None, n_mels=self.params["n_mels"],
                                             normalize=self.params["normalize"])
-
         return spectrogram
 
     def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor]:

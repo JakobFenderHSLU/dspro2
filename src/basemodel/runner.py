@@ -1,4 +1,3 @@
-import logging
 import time
 
 import numpy as np
@@ -15,45 +14,51 @@ from torch.utils.data import DataLoader
 from src.basemodel.classifier import AudioClassifier
 from src.basemodel.dataset import SoundDS
 from src.util.LoggerUtils import init_logging
+from src.util.ScaleUtil import convert_to_small
 
 log = init_logging("basemodel")
 
 
 class BasemodelRunner:
-    def __init__(self, train_df: pd.DataFrame, val_df: pd.DataFrame, verbose: bool) -> None:
+    def __init__(self, train_df: pd.DataFrame, val_df: pd.DataFrame, scale: str = "debug") -> None:
         self.train_df: pd.DataFrame = train_df
         self.val_df: pd.DataFrame = val_df
         self.train_dl: DataLoader = None
         self.val_dl: DataLoader = None
-        self.class_counts: int = len(train_df.columns) - 1
         self.device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model: AudioClassifier = None
         self.loss_function: CrossEntropyLoss = nn.CrossEntropyLoss()
+        self.scale: str = scale
 
-        if verbose:
-            log.setLevel(logging.DEBUG)
+    @property
+    def class_counts(self) -> int:
+        return len(self.train_df.columns) - 1
 
     def run(self) -> None:
         sweep_config: dict = {
             "name": "Baseline Sweep",
             "method": "grid",
-            "metric": {"goal": "maximize", "name": "val_f1"},
+            "metric": {"goal": "maximize", "name": "val/f1"},
             "parameters": {
-                "epochs": {"value": 10000},
+                "epochs": {"value": 5},
                 "learning_rate": {"value": 0.1},  # {"min": 0.0001, "max": 0.1},
                 "batch_size_train": {"values": [64]},  # try higher
                 "batch_size_val": {"values": [64]},  # try higher
                 "anneal_strategy": {"values": ["linear"]},
-                "normalize": {"values": [True, False]},
-                "n_mels": {"values": [64]},  # try
-            }
+                "normalize": {"values": [True]},  # Through testing, normalization is better
+                "n_mels": {"values": [64]},  # {"min": 32, "max": 128},
+            },
+            "optimizer": ["adam"],
         }
+        if self.scale == "small":
+            sweep_config["parameters"]["label_count"] = {"values": [4, 8, 16, 32]}
+
         log.debug(f"Starting sweep with config:")
         log.debug(sweep_config)
         sweep_id: str = wandb.sweep(sweep=sweep_config, project="Baseline-Full", entity="swiss-birder")
         log.debug("started sweep with id: {sweep_id}")
         log.info(f"Using device {self.device}")
-        wandb.agent(sweep_id, function=self._run, count=1)
+        wandb.agent(sweep_id, function=self._run, count=100)
 
     def _run(self) -> None:
         run = wandb.init()
@@ -62,6 +67,9 @@ class BasemodelRunner:
             "n_mels": wandb.config.n_mels,
             "normalize": wandb.config.normalize,
         }
+
+        if self.scale == "small":
+            self.train_df, self.val_df = convert_to_small(self.train_df, self.val_df, wandb.config.label_count)
 
         train_ds = SoundDS(self.train_df, params, self.device)
         val_ds = SoundDS(self.val_df, params, self.device)
@@ -109,6 +117,7 @@ class BasemodelRunner:
 
             # Repeat for each batch in the training set
             test_time = time.time()
+            is_first_in_epoch = True
             for data in self.train_dl:
                 if test_time:
                     log.info(f"Time to get batch: {time.time() - test_time}")
@@ -147,17 +156,17 @@ class BasemodelRunner:
                 optimizer.step()
                 scheduler.step()
 
-                for name, param in self.model.named_parameters():
-                    wandb.log({f"gradients/{name}": wandb.Histogram(param.grad.cpu().numpy())})
-
                 is_first = False
 
-                # Keep stats for Loss and Accuracy
-                wandb.log({
-                    "train/loss": loss.item(),
-                    "debug/time_per_batch": time.time() - timestamp
-                })
-
+                if epoch_iter % 10 == 0:
+                    if is_first_in_epoch:
+                        for name, param in self.model.named_parameters():
+                            wandb.log({f"gradients/{name}": wandb.Histogram(param.grad.cpu().numpy())})
+                        wandb.log({
+                            "train/loss": loss.item(),
+                            "debug/time_per_batch": time.time() - timestamp
+                        })
+                        is_first_in_epoch = False
             self._inference(epoch)
             epoch_duration = time.time() - epoch_time
             log.info(f"Epoch time: {int(epoch_duration // 60)} min {int(epoch_duration % 60)} sec")

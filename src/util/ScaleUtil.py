@@ -3,7 +3,8 @@ from typing import Tuple
 import pandas as pd
 
 
-def convert_to_small(train_df: pd.DataFrame, val_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def convert_to_small(train_df: pd.DataFrame, val_df: pd.DataFrame, label_count: int = 7) \
+        -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Convert the DataFrames to small DataFrames for training and validation
     :param train_df: DataFrame containing training data
@@ -13,7 +14,7 @@ def convert_to_small(train_df: pd.DataFrame, val_df: pd.DataFrame) -> Tuple[pd.D
     train_df = train_df.copy()
     val_df = val_df.copy()
 
-    cols = train_df.columns[:7]
+    cols = train_df.columns[:label_count + 1]
     train_df = train_df[cols]
     val_df = val_df[cols]
 
