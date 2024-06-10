@@ -16,7 +16,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.path is None:
-        args.path = "./input/scrape/"
+        args.path = "./input/scrape/segmented/"
     if args.ratios is None:
         args.ratios = [0.6, 0.2, 0.2]
     else:
@@ -35,9 +35,10 @@ if __name__ == "__main__":
 
     # confirm before proceeding
     if args.yes is None:
-        proceed = input("Proceed with splitting data? [Y/n]: ")
-        if proceed.lower() == "n" or proceed.lower() == "no":
-            log.info("Exiting...")
-            exit()
+        log.critical(
+            "no confirmation provided. If you want do delete corrupt files, provide the -y flag. Exiting...")
+        exit()
+
+    log.info("Starting data split...")
 
     split_data(args.path, args.ratios, args.seed, args.min)

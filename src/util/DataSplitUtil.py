@@ -9,8 +9,8 @@ from src.util.LoggerUtils import init_logging
 log = init_logging("data_split")
 
 
-def split_data(path: str = "./../../input/scrape/", split_ratio: List[float] = [0.6, 0.2, 0.2], seed: int = 42,
-               min_samples: int = 0):
+def split_data(path: str, split_ratio: List[float], seed: int,
+               min_samples: int):
     """
     Split the data into training, validation, and test sets based on the provided split ratio. Save the resulting
     DataFrames as CSV files in the specified directory.
