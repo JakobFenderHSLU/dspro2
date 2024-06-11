@@ -9,7 +9,7 @@ from src.util.logger_utils import init_logging
 log = init_logging("dataset")
 
 
-class SoundDS(Dataset):
+class AudioDataset(Dataset):
     def __init__(self, df, transform, duration_ms: int):
         self.df = df
         self.transform = transform
