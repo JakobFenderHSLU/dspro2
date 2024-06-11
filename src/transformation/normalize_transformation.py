@@ -1,7 +1,7 @@
 import torch
 
 
-class NormalizeTransformer(torch.nn.Module):
+class NormalizeTransformation(torch.nn.Module):
     def __init__(self):
         super().__init__()
 

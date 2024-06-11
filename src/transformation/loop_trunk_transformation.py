@@ -1,7 +1,7 @@
 import torch
 
 
-class LoopTrunkTransformer(torch.nn.Module):
+class LoopTrunkTransformation(torch.nn.Module):
     def __init__(self, duration_ms: int, sample_rate: int):
         super().__init__()
         self.duration_ms = duration_ms

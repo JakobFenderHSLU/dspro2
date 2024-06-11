@@ -4,7 +4,7 @@ import torch
 import torchaudio
 
 
-class ResampleTransformer(torch.nn.Module):
+class ResampleTransformation(torch.nn.Module):
     def __init__(self, sample_rate: int):
         super().__init__()
         self.sample_rate = sample_rate

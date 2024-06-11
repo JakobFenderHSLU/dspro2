@@ -1,7 +1,7 @@
 import torch.nn
 
 
-class RechannelTransformer(torch.nn.Module):
+class RechannelTransformation(torch.nn.Module):
     def __init__(self, channel: int = 2):
         super().__init__()
         self.channel = channel
