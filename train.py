@@ -16,7 +16,10 @@ log = init_logging("train")
 POSSIBLE_MODELS = ["cnn", "cnn-transfer"]
 POSSIBLE_SCALES = ["full", "small", "debug"]
 
+
 if __name__ == "__main__":
+    __spec__ = None
+
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--path", type=str, help="path to the data file")
     parser.add_argument("-v", "--verbose", action="store_true", help="verbose mode")

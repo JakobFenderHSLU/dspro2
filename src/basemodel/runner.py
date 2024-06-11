@@ -1,3 +1,4 @@
+import gc
 import time
 
 import numpy as np
@@ -14,10 +15,10 @@ from torch.utils.data import DataLoader
 
 from src.basemodel.classifier import AudioClassifier
 from src.basemodel.dataset import SoundDS
-from src.transformer.loop_trunk_transformer import LoopTrunkTransformer
-from src.transformer.normalize_transformer import NormalizeTransformer
-from src.transformer.recannel_transformer import RechannelTransformer
-from src.transformer.resample_transformer import ResampleTransformer
+from src.transformation.loop_trunk_transformation import LoopTrunkTransformation
+from src.transformation.normalize_transformation import NormalizeTransformation
+from src.transformation.rechannel_transformation import RechannelTransformation
+from src.transformation.resample_transformation import ResampleTransformation
 from src.util.logger_utils import init_logging
 
 log = init_logging("basemodel")
@@ -46,8 +47,8 @@ class BasemodelRunner:
             "parameters": {
                 "epochs": {"value": 5},
                 "learning_rate": {"value": 0.1},  # {"min": 0.0001, "max": 0.1},
-                "batch_size_train": {"values": [64]},  # try higher
-                "batch_size_val": {"values": [64]},  # try higher
+                "batch_size_train": {"values": [16]},  # try higher
+                "batch_size_val": {"values": [16]},  # try higher
                 "anneal_strategy": {"values": ["linear"]},
 
                 # Parameters for SpectrogramPipeline
@@ -71,28 +72,28 @@ class BasemodelRunner:
     def _run(self) -> None:
         run = wandb.init()
 
-        transformers = torch.nn.Sequential(
-            ResampleTransformer(sample_rate=wandb.config.sample_rate),
-            RechannelTransformer(channel=wandb.config.channel),
-            LoopTrunkTransformer(duration_ms=wandb.config.duration_ms, sample_rate=wandb.config.sample_rate),
+        transformations = torch.nn.Sequential(
+            ResampleTransformation(sample_rate=wandb.config.sample_rate),
+            RechannelTransformation(channel=wandb.config.channel),
+            LoopTrunkTransformation(duration_ms=wandb.config.duration_ms, sample_rate=wandb.config.sample_rate),
             torchaudio.transforms.MelSpectrogram(
                 sample_rate=wandb.config.sample_rate,
                 n_mels=wandb.config.n_mels,
                 n_fft=wandb.config.n_fft
             ),
-            NormalizeTransformer()
+            NormalizeTransformation()
         )
 
-        train_ds = SoundDS(self.train_df, transform=transformers)
-        val_ds = SoundDS(self.val_df, transform=transformers)
+        train_ds = SoundDS(self.train_df, transform=transformations, duration_ms=wandb.config.duration_ms)
+        val_ds = SoundDS(self.val_df, transform=transformations, duration_ms=wandb.config.duration_ms)
 
         log.debug(f"Train DS length: {len(train_ds)}")
         log.debug(f"Val DS length: {len(val_ds)}")
 
-        # num_workers=32 (equals or less than amount of CPUs) prefetch_factor=2 check out
-        # https://pytorch.org/docs/stable/data.html#torch.utils.data.IterableDataset
-        self.train_dl = DataLoader(train_ds, batch_size=wandb.config.batch_size_train, shuffle=True)
-        self.val_dl = DataLoader(val_ds, batch_size=wandb.config.batch_size_val, shuffle=False)
+        self.train_dl = DataLoader(train_ds, batch_size=wandb.config.batch_size_train, num_workers=8,
+                                   prefetch_factor=2, persistent_workers=True)
+        self.val_dl = DataLoader(val_ds, batch_size=wandb.config.batch_size_val, num_workers=8,
+                                 prefetch_factor=2, persistent_workers=True)
 
         self.model = AudioClassifier(self.class_counts).to(self.device)
 
@@ -130,7 +131,7 @@ class BasemodelRunner:
             # Repeat for each batch in the training set
             test_time = time.time()
             is_first_in_epoch = True
-            for data in self.train_dl:
+            for data in self.train_dl:  # very slow
                 if test_time:
                     log.info(f"Time to get batch: {time.time() - test_time}")
                     test_time = None
@@ -179,12 +180,14 @@ class BasemodelRunner:
                             "debug/time_per_batch": time.time() - timestamp
                         })
                         is_first_in_epoch = False
-            self._inference(epoch)
+            gc.collect()
+            self._inference()
+            gc.collect()
             epoch_duration = time.time() - epoch_time
             log.info(f"Epoch time: {int(epoch_duration // 60)} min {int(epoch_duration % 60)} sec")
         log.info('Finished Training')
 
-    def _inference(self, epoch: int) -> None:
+    def _inference(self) -> None:
         log.info("Starting Inference")
         # Disable gradient updates
         with (torch.no_grad()):
