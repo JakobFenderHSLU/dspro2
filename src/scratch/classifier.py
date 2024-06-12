@@ -56,18 +56,11 @@ class AudioClassifier(nn.Module):
     # Forward pass computations
     # ----------------------------
     def forward(self, x):
-        # Run the convolutional blocks
         x = self.conv(x)
 
-        # Adaptive pool and flatten for input to linear layer
         x = self.ap(x)
         x = x.view(x.shape[0], -1)
-
-        # Linear layer
         x = self.lin(x)
 
-        # softmax
         x = nn.functional.softmax(x, dim=1)
-
-        # Final output
         return x

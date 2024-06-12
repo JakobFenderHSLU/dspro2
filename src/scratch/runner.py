@@ -14,7 +14,7 @@ from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import DataLoader
 
 from src.basemodel.classifier import AudioClassifier
-from src.basemodel.dataset import SoundDS
+from src.dataset.audio_dataset import AudioDataset
 from src.transformation.loop_trunk_transformation import LoopTrunkTransformation
 from src.transformation.normalize_transformation import NormalizeTransformation
 from src.transformation.rechannel_transformation import RechannelTransformation
@@ -40,12 +40,15 @@ class BasemodelRunner:
         return len(self.train_df.columns) - 1
 
     def run(self) -> None:
+        formatted_time = time.strftime("%Y-%m-%d-%H-%M", time.localtime())
+        wandb_run_name = f"{formatted_time}-scratch-{self.scale}-{self.class_counts}"
+
         sweep_config: dict = {
-            "name": "Baseline Sweep",
+            "name": wandb_run_name,
             "method": "grid",
             "metric": {"goal": "maximize", "name": "val/f1"},
             "parameters": {
-                "epochs": {"value": 5},
+                "epochs": {"value": 1000},
                 "learning_rate": {"value": 0.1},  # {"min": 0.0001, "max": 0.1},
                 "batch_size_train": {"values": [16]},  # try higher
                 "batch_size_val": {"values": [16]},  # try higher
@@ -64,13 +67,15 @@ class BasemodelRunner:
 
         log.debug(f"Starting sweep with config:")
         log.debug(sweep_config)
-        sweep_id: str = wandb.sweep(sweep=sweep_config, project="Baseline-Full", entity="swiss-birder")
+        sweep_id: str = wandb.sweep(sweep=sweep_config, project="cnn_from_scratch", entity="swiss-birder")
         log.debug("started sweep with id: {sweep_id}")
         log.info(f"Using device {self.device}")
         wandb.agent(sweep_id, function=self._run, count=100)
 
     def _run(self) -> None:
-        run = wandb.init()
+        formatted_time = time.strftime("%Y-%m-%d-%H-%M", time.localtime())
+        wandb_run_name = f"{formatted_time}-scratch-{self.scale}-f{self.class_counts}"
+        run = wandb.init(name=wandb_run_name, project="cnn_from_scratch", entity="swiss-birder")
 
         transformations = torch.nn.Sequential(
             ResampleTransformation(sample_rate=wandb.config.sample_rate),
@@ -84,23 +89,28 @@ class BasemodelRunner:
             NormalizeTransformation()
         )
 
-        train_ds = SoundDS(self.train_df, transform=transformations, duration_ms=wandb.config.duration_ms)
-        val_ds = SoundDS(self.val_df, transform=transformations, duration_ms=wandb.config.duration_ms)
+        train_ds = AudioDataset(self.train_df, transform=transformations, duration_ms=wandb.config.duration_ms)
+        val_ds = AudioDataset(self.val_df, transform=transformations, duration_ms=wandb.config.duration_ms)
 
         log.debug(f"Train DS length: {len(train_ds)}")
         log.debug(f"Val DS length: {len(val_ds)}")
 
-        self.train_dl = DataLoader(train_ds, batch_size=wandb.config.batch_size_train, num_workers=8,
-                                   prefetch_factor=2, persistent_workers=True)
-        self.val_dl = DataLoader(val_ds, batch_size=wandb.config.batch_size_val, num_workers=8,
-                                 prefetch_factor=2, persistent_workers=True)
+        self.train_dl = DataLoader(train_ds,
+                                   batch_size=wandb.config.batch_size_train,
+                                   num_workers=8,
+                                   prefetch_factor=2,
+                                   persistent_workers=True)
+        self.val_dl = DataLoader(val_ds,
+                                 batch_size=wandb.config.batch_size_val,
+                                 num_workers=8,
+                                 prefetch_factor=2,
+                                 persistent_workers=True)
 
         self.model = AudioClassifier(self.class_counts).to(self.device)
 
         img = wandb.Image(self.val_dl.dataset[0][0][0].cpu().numpy())
         wandb.log({"debug/img": img})
 
-        # Fix: wandb.watch(self.model, log="all") is not working
         wandb.watch(self.model, log="all")
         self._training()
         wandb.unwatch(self.model)
@@ -173,10 +183,8 @@ class BasemodelRunner:
 
                 if epoch_iter % 10 == 0:
                     if is_first_in_epoch:
-                        for name, param in self.model.named_parameters():
-                            wandb.log({f"gradients/{name}": wandb.Histogram(param.grad.cpu().numpy())})
                         wandb.log({
-                            "train/loss": loss.item(),
+                            "debug/train/loss": loss.item(),
                             "debug/time_per_batch": time.time() - timestamp
                         })
                         is_first_in_epoch = False
@@ -239,9 +247,14 @@ class BasemodelRunner:
                 log.debug("y_pred (argmax)")
                 log.debug(y_pred[0])
 
+            acc = accuracy_score(y_true, y_pred)
+            f1 = f1_score(y_true, y_pred, average='weighted')
+            log.info(f"Accuracy: {acc}")
+            log.info(f"F1: {f1}")
+
             wandb.log({
-                "val/acc": accuracy_score(y_true, y_pred),
-                "val/f1": f1_score(y_true, y_pred, average='weighted')
+                "val/accuracy": acc,
+                "val/f1": f1
             })
             # check if sum of y_true is 0
 
@@ -257,6 +270,6 @@ class BasemodelRunner:
                 log.debug(y_pred[0])
 
             # create confusion matrix
-            wandb.log({"val/confusion_matrix": wandb.plot.confusion_matrix(y_true=y_true, preds=y_pred)})
+            wandb.log({"debug/confusion_matrix": wandb.plot.confusion_matrix(y_true=y_true, preds=y_pred)})
 
         log.info('Finished Inference')
