@@ -12,10 +12,11 @@ from src.scratch.runner import CnnFromScratchRunner
 from src.util.file_utils import validate
 from src.util.logger_utils import init_logging
 from src.util.scale_utils import convert_to_small, convert_to_debug
+from src.vggish.runner import VGGishRunner
 
 log = init_logging("train")
 
-POSSIBLE_MODELS = ["cnn", "knn"]
+POSSIBLE_MODELS = ["cnn", "knn", "vggish"]
 POSSIBLE_SCALES = ["full", "small", "debug"]
 
 if __name__ == "__main__":
@@ -70,6 +71,11 @@ if __name__ == "__main__":
         if args.model == "cnn":
             log.info("Training cnn model...")
             runner = CnnFromScratchRunner(train_df, val_df, args.scale)
+            runner.run()
+
+        elif args.model == "vggish":
+            log.info("Training vggish model...")
+            runner = VGGishRunner(train_df, val_df)
             runner.run()
 
         elif args.model == "knn":
