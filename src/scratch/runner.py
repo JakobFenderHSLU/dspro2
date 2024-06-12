@@ -13,7 +13,7 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import DataLoader
 
-from src.basemodel.classifier import AudioClassifier
+from src.scratch.classifier import AudioClassifier
 from src.dataset.audio_dataset import AudioDataset
 from src.transformation.loop_trunk_transformation import LoopTrunkTransformation
 from src.transformation.normalize_transformation import NormalizeTransformation
@@ -21,10 +21,10 @@ from src.transformation.rechannel_transformation import RechannelTransformation
 from src.transformation.resample_transformation import ResampleTransformation
 from src.util.logger_utils import init_logging
 
-log = init_logging("basemodel")
+log = init_logging("scratch_runner")
 
 
-class BasemodelRunner:
+class CnnFromScratchRunner:
     def __init__(self, train_df: pd.DataFrame, val_df: pd.DataFrame, scale: str = "debug") -> None:
         self.train_df: pd.DataFrame = train_df
         self.val_df: pd.DataFrame = val_df

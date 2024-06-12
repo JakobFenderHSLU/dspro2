@@ -6,16 +6,16 @@ import time
 import pandas as pd
 import torch
 
-from src.basemodel.runner import BasemodelRunner
+from src.embedder.beat_embedder import BeatEmbedder
+from src.scratch.runner import CnnFromScratchRunner
 from src.util.file_utils import validate
 from src.util.logger_utils import init_logging
 from src.util.scale_utils import convert_to_small, convert_to_debug
 
 log = init_logging("train")
 
-POSSIBLE_MODELS = ["cnn", "cnn-transfer"]
+POSSIBLE_MODELS = ["cnn", "beat-adda-boost"]
 POSSIBLE_SCALES = ["full", "small", "debug"]
-
 
 if __name__ == "__main__":
     __spec__ = None
@@ -67,12 +67,14 @@ if __name__ == "__main__":
             train_df, val_df = convert_to_debug(train_df, val_df)
 
         if args.model == "cnn":
-            log.info("Training base cnn model...")
-            runner = BasemodelRunner(train_df, val_df, args.scale)
+            log.info("Training cnn model...")
+            runner = CnnFromScratchRunner(train_df, val_df, args.scale)
             runner.run()
 
-        elif args.model == "cnn-transfer":
-            log.info("Training transfer learning model...")
+        elif args.model == "beat-adda-boost":
+            log.info("Training beat-adda-boost model...")
+            runner = BeatEmbedder(train_df, val_df, args.scale)
+            runner.run()
 
     # HH:MM:SS
     formatted_duration = time.strftime("%H:%M:%S", time.gmtime(time.time() - script_start_time))
