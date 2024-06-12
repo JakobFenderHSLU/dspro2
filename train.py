@@ -6,7 +6,8 @@ import time
 import pandas as pd
 import torch
 
-from src.embedder.beat_embedder import BeatEmbedder
+from src.feature_extractor.beat_embedder import BeatEmbedder
+from src.knn.runner import KnnRunner
 from src.scratch.runner import CnnFromScratchRunner
 from src.util.file_utils import validate
 from src.util.logger_utils import init_logging
@@ -14,7 +15,7 @@ from src.util.scale_utils import convert_to_small, convert_to_debug
 
 log = init_logging("train")
 
-POSSIBLE_MODELS = ["cnn", "beat-adda-boost"]
+POSSIBLE_MODELS = ["cnn", "knn"]
 POSSIBLE_SCALES = ["full", "small", "debug"]
 
 if __name__ == "__main__":
@@ -71,9 +72,9 @@ if __name__ == "__main__":
             runner = CnnFromScratchRunner(train_df, val_df, args.scale)
             runner.run()
 
-        elif args.model == "beat-adda-boost":
-            log.info("Training beat-adda-boost model...")
-            runner = BeatEmbedder(train_df, val_df, args.scale)
+        elif args.model == "knn":
+            log.info("Training knn model...")
+            runner = KnnRunner(train_df, val_df)
             runner.run()
 
     # HH:MM:SS
