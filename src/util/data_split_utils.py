@@ -1,7 +1,8 @@
 import os
-from typing import List
+from typing import List, Tuple
 
 import pandas as pd
+import torchaudio
 from sklearn.model_selection import train_test_split
 
 from src.util.logger_utils import init_logging
@@ -10,7 +11,8 @@ log = init_logging("data_split")
 
 
 def split_data(path: str, split_ratio: List[float], seed: int,
-               min_samples: int):
+               min_samples: int, min_duration_s: int,
+               balance: bool = False) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Split the data into training, validation, and test sets based on the provided split ratio. Save the resulting
     DataFrames as CSV files in the specified directory.
@@ -18,6 +20,7 @@ def split_data(path: str, split_ratio: List[float], seed: int,
     :param split_ratio: The ratio in which to split the data. Default is [0.6, 0.2, 0.2].
     :param seed: The seed value for the random number generator. Default is 42.
     :param min_samples: The minimum number of samples per class. Default is 0.
+    :param min_duration_s: The minimum duration of audio files. Default is 0.
     :return: A DataFrame containing the split data.
     """
     if not os.path.exists(path):
@@ -42,7 +45,16 @@ def split_data(path: str, split_ratio: List[float], seed: int,
 
     df = pd.DataFrame(df_dict)
 
-    # remove species with less than 3 samples
+    # remove files with less than min duration
+    df['length_s'] = df['file_path'].apply(
+        lambda x: torchaudio.info(x).num_frames / torchaudio.info(x).sample_rate
+    )
+
+    # remove rows with length less than duration
+    df = df[df['length_s'] >= min_duration_s].copy()
+    df.drop('length_s', axis=1, inplace=True)
+
+    # remove species with less than min samples
     species_counts = df["species_name"].value_counts()
     species_ids = species_counts[species_counts >= min_samples].index
     df = df[df["species_name"].isin(species_ids)]
@@ -51,6 +63,12 @@ def split_data(path: str, split_ratio: List[float], seed: int,
     filtered_out_species = species_counts[species_counts < min_samples].index
     for species in filtered_out_species:
         log.warning(f"Filtered out species {species} with {species_counts[species]} samples")
+
+    # balance the data
+    if balance:
+        df = df.groupby("species_name").apply(
+            lambda x: x.sample(df["species_name"].value_counts().min())
+        ).reset_index(drop=True)
 
     # one hot encode species_id as 1, 0
     species_dummies = pd.get_dummies(df["species_name"], prefix="species_name")

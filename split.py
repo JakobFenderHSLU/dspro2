@@ -11,7 +11,9 @@ if __name__ == "__main__":
     parser.add_argument("-r", "--ratios", type=str, nargs="+", help="ratios for train, val, test")
     parser.add_argument("-s", "--seed", type=int, help="seed value for random number generator")
     parser.add_argument("-y", "--yes", action="store_true", help="yes to skip confirmation prompt")
-    parser.add_argument("-m", "--min", type=int, help="minimum number of samples per class")
+    parser.add_argument("-ms", "--min-samples", type=int, help="minimum number of samples per class")
+    parser.add_argument("-md", "--min-duration", type=int, help="minimum duration of audio files")
+    parser.add_argument("-b", "--balance", action="store_true", help="balance the data")
 
     args = parser.parse_args()
 
@@ -24,14 +26,19 @@ if __name__ == "__main__":
     if args.seed is None:
         args.seed = 42
 
-    if args.min is None:
-        args.min = 0
+    if args.min_samples is None:
+        args.min_samples = 0
+
+    if args.min_duration is None:
+        args.min_duration = 0
 
     log.info("Arguments:")
     log.info(f"Path: {args.path}")
     log.info(f"Ratios: {args.ratios}")
     log.info(f"Seed: {args.seed}")
-    log.info(f"Minimum samples per class: {args.min}")
+    log.info(f"Minimum samples per class: {args.min_samples}")
+    log.info(f"Minimum duration: {args.min_duration}")
+    log.info(f"Balance: {args.balance}")
 
     # confirm before proceeding
     if args.yes is None:
@@ -41,4 +48,4 @@ if __name__ == "__main__":
 
     log.info("Starting data split...")
 
-    split_data(args.path, args.ratios, args.seed, args.min)
+    split_data(args.path, args.ratios, args.seed, args.min_samples, args.min_duration, args.balance)
