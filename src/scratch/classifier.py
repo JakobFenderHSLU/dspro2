@@ -56,7 +56,21 @@ class AudioClassifier(nn.Module):
     # Forward pass computations
     # ----------------------------
     def forward(self, x):
-        x = self.conv(x)
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = self.bn1(x)
+
+        x = self.conv2(x)
+        x = self.relu2(x)
+        x = self.bn2(x)
+
+        x = self.conv3(x)
+        x = self.relu3(x)
+        x = self.bn3(x)
+
+        x = self.conv4(x)
+        x = self.relu4(x)
+        x = self.bn4(x)
 
         x = self.ap(x)
         x = x.view(x.shape[0], -1)
