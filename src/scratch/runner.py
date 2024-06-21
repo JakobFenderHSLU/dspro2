@@ -13,8 +13,8 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import DataLoader
 
-from src.scratch.classifier import AudioClassifier
 from src.dataset.audio_dataset import AudioDataset
+from src.scratch.classifier import AudioClassifier
 from src.transformation.loop_trunk_transformation import LoopTrunkTransformation
 from src.transformation.normalize_transformation import NormalizeTransformation
 from src.transformation.rechannel_transformation import RechannelTransformation
@@ -34,10 +34,16 @@ class CnnFromScratchRunner:
         self.model: AudioClassifier = None
         self.loss_function: CrossEntropyLoss = nn.CrossEntropyLoss().to(self.device)
         self.scale: str = scale
+        self.best_f1 = 0
+        self.best_f1_epoch = 0
 
     @property
     def class_counts(self) -> int:
         return len(self.train_df.columns) - 1
+
+    @property
+    def class_labels(self) -> list:
+        return [self.train_df.columns[i] for i in range(1, len(self.train_df.columns))]
 
     def run(self) -> None:
         formatted_time = time.strftime("%Y-%m-%d-%H-%M", time.localtime())
@@ -49,7 +55,7 @@ class CnnFromScratchRunner:
             "metric": {"goal": "maximize", "name": "val/f1"},
             "parameters": {
                 "epochs": {"value": 1000},
-                "learning_rate": {"value": 0.1},  # {"min": 0.0001, "max": 0.1},
+                "learning_rate": {"value": 0.01},  # {"min": 0.0001, "max": 0.1},
                 "batch_size_train": {"values": [16]},  # try higher
                 "batch_size_val": {"values": [16]},  # try higher
                 "anneal_strategy": {"values": ["linear"]},
@@ -57,7 +63,7 @@ class CnnFromScratchRunner:
                 # Parameters for SpectrogramPipeline
                 "sample_rate": {"values": [44_100]},
                 "channel": {"values": [2]},
-                "duration_ms": {"values": [30_000]},
+                "duration_ms": {"values": [15_000]},
                 "n_mels": {"values": [64]},  # {"min": 32, "max": 128},
                 "n_fft": {"values": [1024]},
                 "normalize": {"values": [True]},  # Through testing, normalization is better
@@ -74,8 +80,8 @@ class CnnFromScratchRunner:
 
     def _run(self) -> None:
         formatted_time = time.strftime("%Y-%m-%d-%H-%M", time.localtime())
-        wandb_run_name = f"{formatted_time}-scratch-{self.scale}-f{self.class_counts}"
-        run = wandb.init(name=wandb_run_name, project="cnn_from_scratch", entity="swiss-birder")
+        wandb_run_name = f"{formatted_time}-scratch-{self.scale}-{self.class_counts}"
+        self.run = wandb.init(name=wandb_run_name, project="cnn_from_scratch", entity="swiss-birder")
 
         transformations = torch.nn.Sequential(
             ResampleTransformation(sample_rate=wandb.config.sample_rate),
@@ -115,14 +121,12 @@ class CnnFromScratchRunner:
         self._training()
         wandb.unwatch(self.model)
 
-        model_name = f"./output/{run.id}_{run.name}_model.onnx"
-        torch.onnx.export(self.model, torch.randn(1, 2, 64, 64).to(self.device), model_name)
-
-        log.info(f"Model saved to {model_name}")
-        wandb.save(model_name)
         wandb.finish()
 
     def _training(self) -> None:
+
+        self.model.train()
+
         log.info("Starting Training")
         # Loss Function, Optimizer and Scheduler
         optimizer: Optimizer = torch.optim.Adam(self.model.parameters(), lr=wandb.config.learning_rate)
@@ -141,7 +145,7 @@ class CnnFromScratchRunner:
             # Repeat for each batch in the training set
             test_time = time.time()
             is_first_in_epoch = True
-            for data in self.train_dl:  # very slow
+            for data in self.train_dl:
                 if test_time:
                     log.info(f"Time to get batch: {time.time() - test_time}")
                     test_time = None
@@ -153,9 +157,9 @@ class CnnFromScratchRunner:
                 # first entry of batch
                 if is_first:
                     log.debug(f"First entry of batch: ")
-                    log.debug("input")
+                    log.debug(f"input {inputs.size()}")
                     log.debug(inputs[0])
-                    log.debug("label")
+                    log.debug(f"label {labels.size()}")
                     log.debug(labels[0])
 
                 for i in range(inputs.size(0)):
@@ -189,14 +193,30 @@ class CnnFromScratchRunner:
                         })
                         is_first_in_epoch = False
             gc.collect()
-            self._inference()
+
+            # save model to wandb
+            model_name = f"./output/{self.run.name}_{epoch}.onnx"
+            torch.onnx.export(self.model, torch.randn(1, 2, 64, 64).to(self.device), model_name)
+
+            log.info(f"Model saved to {model_name}")
+            wandb.save(model_name)
+
+            self._inference(epoch)
             gc.collect()
             epoch_duration = time.time() - epoch_time
             log.info(f"Epoch time: {int(epoch_duration // 60)} min {int(epoch_duration % 60)} sec")
+
+            if epoch > 200 and epoch - self.best_f1_epoch > 25:
+                log.info(f"Stopping early at epoch {epoch}")
+                wandb.log({"debug/early_stop": True})
+                break
+
         log.info('Finished Training')
 
-    def _inference(self) -> None:
-        log.info("Starting Inference")
+    def _inference(self, epoch: int) -> None:
+
+        self.model.eval()
+
         # Disable gradient updates
         with (torch.no_grad()):
             y_pred = []
@@ -210,9 +230,9 @@ class CnnFromScratchRunner:
 
                 if is_first:
                     log.debug(f"First entry of batch: ")
-                    log.debug("input")
+                    log.debug(f"input {inputs.size()}")
                     log.debug(inputs[0])
-                    log.debug("label")
+                    log.debug(f"label {labels.size()}")
                     log.debug(labels[0])
 
                 for i in range(inputs.size(0)):
@@ -250,7 +270,13 @@ class CnnFromScratchRunner:
             acc = accuracy_score(y_true, y_pred)
             f1 = f1_score(y_true, y_pred, average='weighted')
             log.info(f"Accuracy: {acc}")
-            log.info(f"F1: {f1}")
+
+            if f1 >= self.best_f1:
+                self.best_f1 = f1
+                self.best_f1_epoch = epoch
+                log.info(f"F1: {f1} (new best)")
+            else:
+                log.info(f"F1: {f1}")
 
             wandb.log({
                 "val/accuracy": acc,
@@ -270,6 +296,9 @@ class CnnFromScratchRunner:
                 log.debug(y_pred[0])
 
             # create confusion matrix
-            wandb.log({"debug/confusion_matrix": wandb.plot.confusion_matrix(y_true=y_true, preds=y_pred)})
+            wandb.log({
+                "debug/confusion_matrix/val":
+                    wandb.plot.confusion_matrix(y_true=y_true, preds=y_pred, class_names=self.class_labels)
+            })
 
         log.info('Finished Inference')
