@@ -16,6 +16,7 @@ def split_data(path: str, split_ratio: List[float], seed: int,
     """
     Split the data into training, validation, and test sets based on the provided split ratio. Save the resulting
     DataFrames as CSV files in the specified directory.
+    :param balance: Whether to balance the data. Default is False.
     :param path: The path to the directory containing the data files.
     :param split_ratio: The ratio in which to split the data. Default is [0.6, 0.2, 0.2].
     :param seed: The seed value for the random number generator. Default is 42.
@@ -40,6 +41,17 @@ def split_data(path: str, split_ratio: List[float], seed: int,
 
         for file in files:
             file_path = str(os.path.join(path, folder, file))
+
+            aud, sr = torchaudio.load(file_path, num_frames=min_duration_s * 44_100)
+
+            if aud.max() == 0:
+                log.warning(f"File {file_path} is empty")
+                continue
+
+            if aud.isnan().any():
+                log.warning(f"File {file_path} contains NaN values")
+                continue
+
             df_dict["species_name"].append(folder)
             df_dict["file_path"].append(file_path)
 
