@@ -2,8 +2,8 @@ import pathlib
 import threading
 
 import pandas as pd
+import torchaudio
 
-from src.util.audio_utils import AudioUtil
 from src.util.logger_utils import init_logging
 
 log = init_logging("file_utils")
@@ -20,7 +20,7 @@ def _verify_files(df, result):
             result["not_mp3"].append(index)
 
         try:
-            AudioUtil.open(file_path)
+            torchaudio.load(file_path, num_frames=44_100 * 30)
         except Exception as e:
             result["corrupted"].append(index)
             log.debug(f"Corrupted: {file_path} - {e}")
