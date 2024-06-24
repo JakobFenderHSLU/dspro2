@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torchaudio
+import torchvision
 import wandb
 from sklearn.metrics import f1_score, accuracy_score
 from torch import nn, Tensor
@@ -16,6 +17,7 @@ from torch.utils.data import DataLoader
 from src.dataset.audio_dataset import AudioDataset
 from src.scratch.classifier import AudioClassifier
 from src.transformation.loop_trunk_transformation import LoopTrunkTransformation
+from src.transformation.noise_transformation import NoiseTransformation
 from src.transformation.normalize_transformation import NormalizeTransformation
 from src.transformation.rechannel_transformation import RechannelTransformation
 from src.transformation.resample_transformation import ResampleTransformation
@@ -92,7 +94,8 @@ class CnnFromScratchRunner:
                 n_mels=wandb.config.n_mels,
                 n_fft=wandb.config.n_fft
             ),
-            NormalizeTransformation()
+            NormalizeTransformation(),
+            NoiseTransformation(noise_factor=0.25)
         )
 
         train_ds = AudioDataset(self.train_df, transform=transformations, duration_ms=wandb.config.duration_ms)
@@ -206,7 +209,7 @@ class CnnFromScratchRunner:
             epoch_duration = time.time() - epoch_time
             log.info(f"Epoch time: {int(epoch_duration // 60)} min {int(epoch_duration % 60)} sec")
 
-            if epoch > 200 and epoch - self.best_f1_epoch > 25:
+            if epoch > 200 and epoch - self.best_f1_epoch > 50:
                 log.info(f"Stopping early at epoch {epoch}")
                 wandb.log({"debug/early_stop": True})
                 break
