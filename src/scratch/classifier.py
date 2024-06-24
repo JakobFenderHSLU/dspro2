@@ -6,7 +6,7 @@ class AudioClassifier(nn.Module):
     # ----------------------------
     # Build the model architecture
     # ----------------------------
-    def __init__(self, num_classes: int = 438):
+    def __init__(self, num_classes: int = 438, in_channels: int = 2):
         if num_classes <= 0:
             raise ValueError("Number of classes should be a positive integer")
 

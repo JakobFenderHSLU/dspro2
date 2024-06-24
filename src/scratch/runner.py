@@ -53,14 +53,15 @@ class CnnFromScratchRunner:
             "metric": {"goal": "maximize", "name": "val/f1"},
             "parameters": {
                 "epochs": {"value": 1000},
-                "learning_rate": {"value": 0.01},  # {"min": 0.0001, "max": 0.1},
+                "learning_rate": {"value": 0.001},  # {"min": 0.0001, "max": 0.1},
                 "batch_size_train": {"values": [16]},  # try higher
                 "batch_size_val": {"values": [16]},  # try higher
                 "anneal_strategy": {"values": ["linear"]},
+                "weight_decay": {"values": [0]},
 
                 # Parameters for SpectrogramPipeline
                 "sample_rate": {"values": [44_100]},
-                "channel": {"values": [2]},
+                "channel": {"values": [1]},
                 "duration_ms": {"values": [15_000]},
                 "n_mels": {"values": [64]},  # {"min": 32, "max": 128},
                 "n_fft": {"values": [1024]},
@@ -113,7 +114,7 @@ class CnnFromScratchRunner:
                                  prefetch_factor=2,
                                  persistent_workers=True)
 
-        self.model = AudioClassifier(self.class_counts).to(self.device)
+        self.model = AudioClassifier(self.class_counts, in_channels=wandb.config.channel).to(self.device)
 
         img = wandb.Image(self.val_dl.dataset[0][0][0].cpu().numpy())
         wandb.log({"debug/img": img})
@@ -130,7 +131,11 @@ class CnnFromScratchRunner:
 
         log.info("Starting Training")
         # Loss Function, Optimizer and Scheduler
-        optimizer: Optimizer = torch.optim.Adam(self.model.parameters(), lr=wandb.config.learning_rate, weight_decay=0.01)
+        optimizer: Optimizer = torch.optim.Adam(
+            self.model.parameters(),
+            lr=wandb.config.learning_rate,
+            weight_decay=wandb.config.weight_decay
+        )
         scheduler: OneCycleLR = OneCycleLR(optimizer, max_lr=wandb.config.learning_rate,
                                            steps_per_epoch=int(len(self.train_dl)),
                                            epochs=wandb.config.epochs,
