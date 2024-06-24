@@ -1,13 +1,10 @@
 import gc
 import time
 
-import numpy as np
 import pandas as pd
 import torch
 import torchaudio
-import torchvision
 import wandb
-from sklearn.metrics import f1_score, accuracy_score
 from torch import nn, Tensor
 from torch.nn import CrossEntropyLoss
 from torch.optim import Optimizer
@@ -22,6 +19,7 @@ from src.transformation.normalize_transformation import NormalizeTransformation
 from src.transformation.rechannel_transformation import RechannelTransformation
 from src.transformation.resample_transformation import ResampleTransformation
 from src.util.logger_utils import init_logging
+from src.util.wandb_utils import WandbUtils
 
 log = init_logging("scratch_runner")
 
@@ -39,13 +37,11 @@ class CnnFromScratchRunner:
         self.best_f1 = 0
         self.best_f1_epoch = 0
 
-    @property
-    def class_counts(self) -> int:
-        return len(self.train_df.columns) - 1
+        self.wandb_utils = None
 
-    @property
-    def class_labels(self) -> list:
-        return [self.train_df.columns[i] for i in range(1, len(self.train_df.columns))]
+        self.class_labels = ["_".join(self.train_df.columns[i].split("_")[2:])
+                             for i in range(1, len(self.train_df.columns))]
+        self.class_counts = len(self.train_df.columns) - 1
 
     def run(self) -> None:
         formatted_time = time.strftime("%Y-%m-%d-%H-%M", time.localtime())
@@ -69,6 +65,7 @@ class CnnFromScratchRunner:
                 "n_mels": {"values": [64]},  # {"min": 32, "max": 128},
                 "n_fft": {"values": [1024]},
                 "normalize": {"values": [True]},  # Through testing, normalization is better
+                "noise_factor": {"values": [0.15]},
             },
             "optimizer": ["adam"],
         }
@@ -84,6 +81,7 @@ class CnnFromScratchRunner:
         formatted_time = time.strftime("%Y-%m-%d-%H-%M", time.localtime())
         wandb_run_name = f"{formatted_time}-scratch-{self.scale}-{self.class_counts}"
         self.run = wandb.init(name=wandb_run_name, project="cnn_from_scratch", entity="swiss-birder")
+        self.wandb_utils = WandbUtils(self.run, self.class_labels)
 
         transformations = torch.nn.Sequential(
             ResampleTransformation(sample_rate=wandb.config.sample_rate),
@@ -95,7 +93,7 @@ class CnnFromScratchRunner:
                 n_fft=wandb.config.n_fft
             ),
             NormalizeTransformation(),
-            NoiseTransformation(noise_factor=0.25)
+            NoiseTransformation(noise_factor=wandb.config.noise_factor)
         )
 
         train_ds = AudioDataset(self.train_df, transform=transformations, duration_ms=wandb.config.duration_ms)
@@ -132,7 +130,7 @@ class CnnFromScratchRunner:
 
         log.info("Starting Training")
         # Loss Function, Optimizer and Scheduler
-        optimizer: Optimizer = torch.optim.Adam(self.model.parameters(), lr=wandb.config.learning_rate)
+        optimizer: Optimizer = torch.optim.Adam(self.model.parameters(), lr=wandb.config.learning_rate, weight_decay=0.01)
         scheduler: OneCycleLR = OneCycleLR(optimizer, max_lr=wandb.config.learning_rate,
                                            steps_per_epoch=int(len(self.train_dl)),
                                            epochs=wandb.config.epochs,
@@ -144,6 +142,9 @@ class CnnFromScratchRunner:
             epoch = epoch_iter + 1
             log.info(f'Epoch: {epoch}')
             epoch_time = time.time()
+
+            y_true = []
+            y_pred_probabilities = []
 
             # Repeat for each batch in the training set
             test_time = time.time()
@@ -157,14 +158,6 @@ class CnnFromScratchRunner:
                 inputs: Tensor = data[0].to(self.device)
                 labels: Tensor = data[1].to(self.device)
 
-                # first entry of batch
-                if is_first:
-                    log.debug(f"First entry of batch: ")
-                    log.debug(f"input {inputs.size()}")
-                    log.debug(inputs[0])
-                    log.debug(f"label {labels.size()}")
-                    log.debug(labels[0])
-
                 for i in range(inputs.size(0)):
                     if inputs[i].sum() == 0:
                         log.error(f"Tensor with label {labels[i]} is empty")
@@ -173,14 +166,17 @@ class CnnFromScratchRunner:
                 optimizer.zero_grad()
 
                 # forward + backward + optimize
-                preds: Tensor = self.model(inputs)
-                loss: Tensor = self.loss_function(preds, labels)
+                predictions: Tensor = self.model(inputs)
+                loss: Tensor = self.loss_function(predictions, labels)
 
                 if is_first:
                     log.debug("pred")
-                    log.debug(preds[0])
+                    log.debug(predictions[0])
                     log.debug("loss")
                     log.debug(loss)
+
+                y_pred_probabilities.extend(predictions.detach().cpu().numpy())
+                y_true.extend(labels.cpu().numpy())
 
                 loss.backward()
                 optimizer.step()
@@ -191,11 +187,13 @@ class CnnFromScratchRunner:
                 if epoch_iter % 10 == 0:
                     if is_first_in_epoch:
                         wandb.log({
-                            "debug/train/loss": loss.item(),
+                            "debug/train_loss": loss.item(),
                             "debug/time_per_batch": time.time() - timestamp
                         })
                         is_first_in_epoch = False
             gc.collect()
+
+            self.wandb_utils.log_model_results(y_true, y_pred_probabilities, mode="train")
 
             # save model to wandb
             model_name = f"./output/{self.run.name}_{epoch}.onnx"
@@ -222,7 +220,7 @@ class CnnFromScratchRunner:
 
         # Disable gradient updates
         with (torch.no_grad()):
-            y_pred = []
+            y_pred_probabilities = []
             y_true = []
 
             is_first = True
@@ -242,66 +240,22 @@ class CnnFromScratchRunner:
                     if inputs[i].sum() == 0:
                         log.error(f"Tensor with label {labels[i]} is empty")
 
-                y_true.extend(labels.cpu().numpy())
-
                 # Get predictions
-                preds: Tensor = self.model(inputs)
-                loss: Tensor = self.loss_function(preds, labels)
+                predictions: Tensor = self.model(inputs)
+                loss: Tensor = self.loss_function(predictions, labels)
 
-                if is_first:
-                    log.debug("pred")
-                    log.debug(preds[0])
-                    log.debug("loss")
-                    log.debug(loss)
+                wandb.log({"debug/val_loss": loss.item()})
 
-                # Count of predictions that matched the target label
-                y_pred.extend(preds.cpu().numpy())
+                y_true.extend(labels.cpu().numpy())
+                y_pred_probabilities.extend(predictions.cpu().numpy())
 
-            # y_pred make the highest value 1 and the rest 0 for this np array
-            y_pred_argmax = np.argmax(y_pred, axis=1)
-            new_y_pred = np.zeros_like(y_pred)
-            new_y_pred[np.arange(len(y_pred)), y_pred_argmax] = 1
+            new_f1 = self.wandb_utils.log_model_results(y_true, y_pred_probabilities, mode="val")
 
-            y_pred = new_y_pred
-
-            if is_first:
-                log.debug("y_true")
-                log.debug(y_true[0])
-                log.debug("y_pred (argmax)")
-                log.debug(y_pred[0])
-
-            acc = accuracy_score(y_true, y_pred)
-            f1 = f1_score(y_true, y_pred, average='weighted')
-            log.info(f"Accuracy: {acc}")
-
-            if f1 >= self.best_f1:
-                self.best_f1 = f1
+            if new_f1 >= self.best_f1:
+                self.best_f1 = new_f1
                 self.best_f1_epoch = epoch
-                log.info(f"F1: {f1} (new best)")
+                log.info(f"F1: {new_f1} (new best)")
             else:
-                log.info(f"F1: {f1}")
-
-            wandb.log({
-                "val/accuracy": acc,
-                "val/f1": f1
-            })
-            # check if sum of y_true is 0
-
-            # confusion matrix
-            # onehot to label
-            y_true = np.argmax(y_true, axis=1)
-            y_pred = np.argmax(y_pred, axis=1)
-
-            if is_first:
-                log.debug("y_true (argmax)")
-                log.debug(y_true[0])
-                log.debug("y_pred (argmax)")
-                log.debug(y_pred[0])
-
-            # create confusion matrix
-            wandb.log({
-                "debug/confusion_matrix/val":
-                    wandb.plot.confusion_matrix(y_true=y_true, preds=y_pred, class_names=self.class_labels)
-            })
+                log.info(f"F1: {new_f1}")
 
         log.info('Finished Inference')
