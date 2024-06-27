@@ -52,12 +52,12 @@ class CnnFromScratchRunner:
             "method": "grid",
             "metric": {"goal": "maximize", "name": "val/f1"},
             "parameters": {
-                "epochs": {"value": 1000},
-                "learning_rate": {"value": 0.001},  # {"min": 0.0001, "max": 0.1},
+                "epochs": {"value": 5000},
+                "learning_rate": {"values": [0.0001, 0.00001]},  # {"min": 0.0001, "max": 0.1},
                 "batch_size_train": {"values": [16]},  # try higher
                 "batch_size_val": {"values": [16]},  # try higher
                 "anneal_strategy": {"values": ["linear"]},
-                "weight_decay": {"values": [0]},
+                "weight_decay": {"values": [0, 0.001]},
 
                 # Parameters for SpectrogramPipeline
                 "sample_rate": {"values": [44_100]},
@@ -66,7 +66,7 @@ class CnnFromScratchRunner:
                 "n_mels": {"values": [64]},  # {"min": 32, "max": 128},
                 "n_fft": {"values": [1024]},
                 "normalize": {"values": [True]},  # Through testing, normalization is better
-                "noise_factor": {"values": [0.15]},
+                "noise_factor": {"values": [0, 0.1]},
             },
             "optimizer": ["adam"],
         }
@@ -202,7 +202,7 @@ class CnnFromScratchRunner:
 
             # save model to wandb
             model_name = f"./output/{self.run.name}_{epoch}.onnx"
-            torch.onnx.export(self.model, torch.randn(1, 2, 64, 64).to(self.device), model_name)
+            torch.onnx.export(self.model, torch.randn(1, wandb.config.channel, 64, 64).to(self.device), model_name)
 
             log.info(f"Model saved to {model_name}")
             wandb.save(model_name)
@@ -212,7 +212,7 @@ class CnnFromScratchRunner:
             epoch_duration = time.time() - epoch_time
             log.info(f"Epoch time: {int(epoch_duration // 60)} min {int(epoch_duration % 60)} sec")
 
-            if epoch > 200 and epoch - self.best_f1_epoch > 50:
+            if epoch > 200 and epoch - self.best_f1_epoch > 100:
                 log.info(f"Stopping early at epoch {epoch}")
                 wandb.log({"debug/early_stop": True})
                 break
