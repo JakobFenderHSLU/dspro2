@@ -82,6 +82,10 @@ class CnnFromScratchRunner:
         formatted_time = time.strftime("%Y-%m-%d-%H-%M", time.localtime())
         wandb_run_name = f"{formatted_time}-scratch-{self.scale}-{self.class_counts}"
         self.run = wandb.init(name=wandb_run_name, project="cnn_from_scratch", entity="swiss-birder")
+
+        self.best_f1 = 0
+        self.best_f1_epoch = 0
+
         self.wandb_utils = WandbUtils(self.run, self.class_labels)
 
         transformations = torch.nn.Sequential(
